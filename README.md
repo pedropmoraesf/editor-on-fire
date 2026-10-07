@@ -6,6 +6,7 @@ This repository contains an independently modified version of **Editor on Fire (
 - **Modified source:** https://github.com/pedropmoraesf/editor-on-fire
 - **DTXMania editing and export documentation:** [README_DTXMANIA.md](README_DTXMANIA.md)
 - **License:** [license.txt](license.txt) (BSD 3-Clause). Original copyright notices and license terms are retained. Bundled third-party components may have their own licenses.
+- **Experimental Windows build (2026-10-07):** [Download the complete ZIP](https://raw.githubusercontent.com/pedropmoraesf/editor-on-fire/community-downloads/EOF-Community-Windows-2026-10-07.zip) | [build notes and checksums](https://github.com/pedropmoraesf/editor-on-fire/tree/community-downloads). Extract the entire ZIP before running `eof.exe`; this build has not passed complete regression testing.
 
 This is an **unofficial, community-maintained modification**, not an official EOF build. T^3 Software and the original contributors do not endorse this edition. Features are under development; test builds before relying on them for chart authoring.
 

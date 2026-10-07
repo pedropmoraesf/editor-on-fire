@@ -1,7 +1,7 @@
 CC = gcc
-CFLAGS = -O2 -fomit-frame-pointer -ffast-math -arch i386 -mmacosx-version-min=10.6 -isysroot /SDKs/MacOSX10.6.sdk -funroll-loops -flto -Ialogg/include -I/usr/local/include -DEOF_BUILD
+CFLAGS = -O2 -fomit-frame-pointer -ffast-math -arch i386 -mmacosx-version-min=10.6 -isysroot /SDKs/MacOSX10.6.sdk -funroll-loops -flto -Ialogg/include -I/usr/local/include $(shell pkg-config --cflags libxml-2.0) -DEOF_BUILD
 CXXFLAGS = $(CFLAGS)
-LIBS = `pkg-config allegro --libs` -framework Cocoa -framework Carbon -framework IOKit -framework System -framework CoreAudio -framework AudioUnit -framework AudioToolBox -framework QuickTime -framework Accelerate -logg -lvorbis -lvorbisfile -lm -lfftw3 -lfftw3f -lrubberband -lstdc++
+LIBS = `pkg-config allegro --libs` -framework Cocoa -framework Carbon -framework IOKit -framework System -framework CoreAudio -framework AudioUnit -framework AudioToolBox -framework QuickTime -framework Accelerate -logg -lvorbis -lvorbisfile -lm -lfftw3 -lfftw3f -lrubberband -lstdc++ $(shell pkg-config --libs libxml-2.0) -lz
 
 include makefile.common
 

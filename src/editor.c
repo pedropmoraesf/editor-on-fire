@@ -907,6 +907,7 @@ if(eof_key_code == KEY_PAUSE)
 
 	if(eof_song_loaded)
 	{
+
 	}
 }
 
@@ -3535,16 +3536,6 @@ if(KEY_EITHER_ALT && (eof_key_code == KEY_V))
 				}
 			}//If SHIFT is held, but CTRL is not
 		}//If the active track is a pro guitar track
-
-	/* edit lyric (N in PART VOCALS) */
-		if((eof_key_char == 'n') && eof_vocals_selected && (eof_selection.track == EOF_TRACK_VOCALS) && (eof_selection.current < eof_song->vocal_track[tracknum]->lyrics))
-		{	//If N is pressed, PART VOCALS is active, and one of its lyrics is the current selected lyric
-			if(!KEY_EITHER_SHIFT && !KEY_EITHER_CTRL && !KEY_EITHER_WIN)
-			{	//Neither SHIFT nor CTRL nor Windows key are held
-				(void) eof_edit_lyric_dialog();
-				eof_use_key();
-			}
-		}
 
 	/* set BEATABLE slide to lane (CTRL+~, CTRL+# in a BEATABLE track) */
 		if(KEY_EITHER_CTRL && !KEY_EITHER_SHIFT)
@@ -6630,16 +6621,6 @@ void eof_render_editor_window_common(EOF_WINDOW *window)
 	/* draw fretboard area */
 	rectfill(window->screen, 0, EOF_EDITOR_RENDER_OFFSET + 25, window->w - 1, EOF_EDITOR_RENDER_OFFSET + eof_screen_layout.fretboard_h - 1, eof_color_piano_roll);
 
-	/* draw spectrogram or waveform graph */
-	if(window != eof_window_editor2)
-	{	//Only draw the graphs for the main piano roll
-		if(eof_display_spectrogram)
-			(void) eof_render_spectrogram(eof_spectrogram);
-
-		if(eof_display_waveform)
-			(void) eof_render_waveform(eof_waveform);
-	}
-
 	/* draw start/end point marking */
 	if((eof_song->tags->start_point != ULONG_MAX) && (eof_song->tags->end_point != ULONG_MAX) && (eof_song->tags->start_point != eof_song->tags->end_point))
 	{	//If both the start and end points are defined with different timestamps
@@ -6967,6 +6948,17 @@ void eof_render_editor_window_common(EOF_WINDOW *window)
 			if((sectionptr->end_pos >= start) && (sectionptr->start_pos <= stop))	//If the kick drum lane section would render between the left and right edges of the piano roll
 				rectfill(window->screen, lpos + sectionptr->start_pos / eof_zoom, y1, lpos + sectionptr->end_pos / eof_zoom, y2, eof_colors[0].lightcolor);
 		}
+	}
+
+	if(window != eof_window_editor2)
+	{	//Only draw the graphs for the main piano roll
+		if(eof_display_spectrogram_experimental)
+			(void) eof_render_spectrogram_experimental(eof_spectrogram);
+		else if(eof_display_spectrogram)
+			(void) eof_render_spectrogram(eof_spectrogram);
+
+		if(eof_display_waveform)
+			(void) eof_render_waveform(eof_waveform);
 	}
 
 	/* draw fretboard strings */
@@ -7818,6 +7810,28 @@ void eof_editor_logic_common(void)
 		eof_scaled_mouse_y = mouse_y / 2;
 	}
 
+	/* A double click directly on the first vertical grid line edits its exact
+	 * start timestamp.  Consume the left click here so it cannot also place or
+	 * select a note in the fretboard. */
+	if(eof_music_paused && eof_song->beats && !eof_full_screen_3d &&
+	   (eof_scaled_mouse_y >= eof_fretboard_boundary_y1) && (eof_scaled_mouse_y <= eof_fretboard_boundary_y2))
+	{
+		int first_grid_x;
+		int near_first_grid;
+		if(pos < 300)
+			first_grid_x = 20 + (int)(eof_song->beat[0]->pos / eof_zoom);
+		else
+			first_grid_x = 20 - (pos - 300) + (int)(eof_song->beat[0]->pos / eof_zoom);
+		near_first_grid = (abs(eof_scaled_mouse_x - first_grid_x) <= 4) ? 1 : 0;
+		(void)eof_dtx_import_grid_line_mouse(near_first_grid, (mouse_b & 1) ? 1 : 0);
+		if(near_first_grid && (mouse_b & 1))
+			mouse_b &= ~1;
+	}
+	else
+	{
+		(void)eof_dtx_import_grid_line_mouse(0, (mouse_b & 1) ? 1 : 0);
+	}
+
 	if(eof_music_paused)
 	{	//If the chart is paused
 		/* mouse is in beat marker area */
@@ -7887,6 +7901,7 @@ void eof_editor_logic_common(void)
 								eof_shift_used = 1;	//Track that the SHIFT key was used
 							}
 							eof_select_beat(eof_hover_beat);
+							(void)eof_dtx_import_grid_start_click(eof_hover_beat);
 						}
 						eof_blclick_released = 0;
 						eof_click_x = eof_scaled_mouse_x;

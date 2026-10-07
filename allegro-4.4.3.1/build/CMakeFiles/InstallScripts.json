@@ -1,0 +1,14 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/Moraes10/Downloads/editor-on-fire-master/allegro-4.4.3.1/build/cmake_install.cmake",
+		"C:/Users/Moraes10/Downloads/editor-on-fire-master/allegro-4.4.3.1/build/addons/allegrogl/cmake_install.cmake",
+		"C:/Users/Moraes10/Downloads/editor-on-fire-master/allegro-4.4.3.1/build/addons/loadpng/cmake_install.cmake",
+		"C:/Users/Moraes10/Downloads/editor-on-fire-master/allegro-4.4.3.1/build/addons/logg/cmake_install.cmake",
+		"C:/Users/Moraes10/Downloads/editor-on-fire-master/allegro-4.4.3.1/build/addons/jpgalleg/cmake_install.cmake",
+		"C:/Users/Moraes10/Downloads/editor-on-fire-master/allegro-4.4.3.1/build/docs/cmake_install.cmake",
+		"C:/Users/Moraes10/Downloads/editor-on-fire-master/allegro-4.4.3.1/build/tools/cmake_install.cmake",
+		"C:/Users/Moraes10/Downloads/editor-on-fire-master/allegro-4.4.3.1/build/setup/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

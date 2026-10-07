@@ -7,6 +7,7 @@
 #include "../foflc/RS_parse.h"	//For XML parsing functions
 #include "../gh_import.h"
 #include "../gp_import.h"
+#include "../tg_import.h"
 #include "../dialog/proc.h"
 #include "../beatable.h"
 #include "../bf.h"
@@ -31,6 +32,7 @@
 #include "../smashdrums.h"
 #include "../song.h"
 #include "../sm.h"
+#include "../dtx_export.h"
 #include "../tuning.h"
 #include "../undo.h"
 #include "../utility.h"
@@ -105,7 +107,8 @@ MENU eof_file_import_menu[] =
 	{"&Feedback (.chart)", eof_menu_file_feedback_import, NULL, 0, NULL},
 	{"Guitar &Hero", eof_menu_file_gh_import, NULL, 0, NULL},
 	{"&Lyric\tShift+F8", eof_menu_file_lyrics_import, NULL, 0, NULL},
-	{"&Guitar Pro\tF12", eof_menu_file_gp_import, NULL, 0, NULL},
+	{"&Guitar Pro / TuxGuitar\tF12", eof_menu_file_gp_import, NULL, 0, NULL},
+	{"&DTX", eof_menu_file_dtx_import, NULL, 0, NULL},
 	{"&Rocksmith\tF7", eof_menu_file_rs_import, NULL, 0, NULL},
 	{"&Bandfuse", eof_menu_file_bf_import, NULL, 0, NULL},
 	{"&Queen Bee", eof_menu_file_array_txt_import, NULL, 0, NULL},
@@ -140,6 +143,7 @@ MENU eof_file_export_menu[] =
 	{"&LLPLUS", eof_menu_file_export_llplus_track_diff, NULL, 0, NULL},
 	{"&DrumBeats", eof_menu_file_export_drumbeats_track, NULL, 0, NULL},
 	{"&Smash Drums", eof_menu_file_export_smashdrums_track, NULL, 0, NULL},
+	{"Export &DTXMania", eof_menu_file_export_dtxmania, NULL, 0, NULL},
 	{NULL, NULL, NULL, 0, NULL}
 };
 
@@ -241,7 +245,7 @@ DIALOG eof_preferences_dialog[] =
 	{ d_agup_check_proc, 16,  271, 190, 16,  2,   23,  0,    0,      1,   0,   "Add new notes to selection",NULL, NULL },
 	{ d_agup_check_proc, 16,  287, 184, 16,  2,   23,  0,    0,      1,   0,   "Don't auto edit new lyrics",NULL, NULL },
 	{ d_agup_check_proc, 16,  255, 200, 16,  2,   23,  0,    0,      1,   0,   "Click to change dialog focus",NULL, NULL },
-	{ d_agup_check_proc, 248, 319, 230, 16,  2,   23,  0,    0,      1,   0,   "EOF leaving focus stops playback",NULL, NULL },
+	{ d_agup_check_proc, 248, 319, 230, 16,  2,   23,  0,    D_SELECTED | D_DISABLED, 1, 0, "Playback continues in background",NULL, NULL },
 	{ d_agup_text_proc,  16,  186, 200, 12,  0,   0,   0,    0,      0,   0,   "Chord density threshold (ms):",NULL,NULL },
 	{ eof_verified_edit_proc,204,186,40,20,  0,   0,   0,    0,      5,   0,   eof_etext3,     "0123456789", NULL },
 	{ d_agup_check_proc, 16,  239, 215, 16,  2,   23,  0,    0,      1,   0,   "Prefer MIDI friendly grid snaps",NULL, NULL },
@@ -256,7 +260,6 @@ DIALOG eof_preferences_dialog[] =
 	{ d_agup_check_proc, 248, 159, 206, 16,  2,   23,  0,    0,      1,   0,   "Use FoF difficulty naming",NULL, NULL },
 	{ d_agup_check_proc, 16,  319, 175, 16,  2,   23,  0,    0,      1,   0,   "Make lyric tails clickable",NULL, NULL },
 	{ d_agup_check_proc, 16,  335, 210, 16,  2,   23,  0,    0,      1,   0,   "CTRL+TAB skips empty tracks",NULL, NULL },
-	{ d_agup_check_proc, 248, 399, 168, 16,  2,   23,  0,    0,      1,   0,   "Don't check for updates",NULL, NULL },
 	{ NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -430,19 +433,6 @@ DIALOG eof_ogg_settings_dialog[] =
 	{ NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL }
 };
 
-DIALOG eof_ogg_settings_2_dialog[] =
-{
-	/* (proc)                 (x)  (y)  (w)  (h)  (fg) (bg) (key) (flags) (d1) (d2) (dp)              (dp2) (dp3) */
-	{ eof_shadow_box_proc, 4,   200, 192, 206, 2,   23,  0,    0,      0,   0,   NULL,             NULL, NULL },
-	{ d_agup_text_proc,       58,  208, 128, 8,   2,   23,  0,    0,      0,   0,   "OGG Settings",   NULL, NULL },
-	{ d_agup_text_proc,       49,  228, 48,  8,   2,   23,  0,    0,      0,   0,   "Encoder Quality",NULL, NULL },
-	{ d_agup_list_proc,       43,  244, 110, 112, 2,   23,  0,    0,      0,   0,   (void *)eof_ogg_list, NULL, NULL },
-	{ d_agup_button_proc,     16,  366, 40,  28,  2,   23,  '\r', D_EXIT, 0,   0,   "OK",             NULL, NULL },
-	{ d_agup_button_proc,     68,  366, 44,  28,  2,   23,  0,   D_EXIT, 0,   0,   "Auto",             NULL, NULL },
-	{ d_agup_button_proc,     124, 366, 60,  28,  2,   23,  0,  D_EXIT, 0,   0,   "Cancel",         NULL, NULL },
-	{ NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL }
-};
-
 DIALOG eof_lyric_detections_dialog[]=
 {
 	/*(proc)             (x)  (y)  (w)  (h)  (fg) (bg)  (key) (flags) (d1) (d2) (dp)                      (dp2) (dp3)*/
@@ -539,6 +529,7 @@ void eof_prepare_file_menu(void)
 			eof_file_export_menu[8].flags = D_DISABLED;	//Don't allow DrumBeats export for non drum tracks
 			eof_file_export_menu[9].flags = D_DISABLED;	//Same for Smash Drums
 		}
+		eof_file_export_menu[10].flags = eof_dtx_track_has_notes(eof_song) ? 0 : D_DISABLED;	//File>Export>DTXMania
 	}
 	else
 	{	//No chart is loaded
@@ -1620,7 +1611,7 @@ int eof_menu_file_preferences(void)
 	eof_preferences_dialog[38].flags = eof_add_new_notes_to_selection ? D_SELECTED : 0;		//Add new notes to selection
 	eof_preferences_dialog[39].flags = eof_dont_auto_edit_new_lyrics ? D_SELECTED : 0;			//Don't auto edit new lyrics
 	eof_preferences_dialog[40].flags = eof_click_changes_dialog_focus ? D_SELECTED : 0;			//Click to change dialog focus
-	eof_preferences_dialog[41].flags = eof_stop_playback_leave_focus ? D_SELECTED : 0;			//EOF leaving focus stops playback
+	eof_preferences_dialog[41].flags = D_SELECTED | D_DISABLED;							//Playback always continues in background
 	eof_preferences_dialog[44].flags = eof_prefer_midi_friendly_grid_snapping ? D_SELECTED : 0;	//Prefer MIDI friendly grid snaps
 	eof_preferences_dialog[45].flags = eof_ghl_conversion_swaps_bw_gems ? D_SELECTED : 0;	//GHL conversion swaps B/W gems
 	eof_preferences_dialog[46].flags = eof_enable_open_strums_by_default ? D_SELECTED : 0;		//Enable open strum by default
@@ -1660,7 +1651,6 @@ int eof_menu_file_preferences(void)
 	eof_preferences_dialog[53].flags = eof_use_fof_difficulty_naming ? D_SELECTED : 0;			//Use FoF difficulty naming
 	eof_preferences_dialog[54].flags = eof_lyric_tails_clickable ? D_SELECTED : 0;				//Make lyric tails clickable
 	eof_preferences_dialog[55].flags = eof_ctrl_tab_skip_empty_tracks ? D_SELECTED : 0;			//CTRL+TAB skips empty tracks
-	eof_preferences_dialog[56].flags = eof_dont_check_for_updates ? D_SELECTED : 0;			//Don't check for updates
 
 	eof_log("\tLaunching preferences dialog", 2);
 
@@ -1743,7 +1733,7 @@ int eof_menu_file_preferences(void)
 				gui_mouse_focus = 0;
 			else
 				gui_mouse_focus = 1;
-			eof_stop_playback_leave_focus = (eof_preferences_dialog[41].flags == D_SELECTED ? 1 : 0);
+			eof_stop_playback_leave_focus = 0;	//Background/minimized playback is always enabled
 			if(eof_etext3[0] != '\0')
 			{	//If the chord density threshold field is populated
 				eof_chord_density_threshold = atol(eof_etext3);
@@ -1784,7 +1774,6 @@ int eof_menu_file_preferences(void)
 			eof_use_fof_difficulty_naming = (eof_preferences_dialog[53].flags == D_SELECTED ? 1 : 0);
 			eof_lyric_tails_clickable = (eof_preferences_dialog[54].flags == D_SELECTED ? 1 : 0);
 			eof_ctrl_tab_skip_empty_tracks = (eof_preferences_dialog[55].flags == D_SELECTED ? 1 : 0);
-			eof_dont_check_for_updates = (eof_preferences_dialog[56].flags == D_SELECTED ? 1 : 0);
 			if(eof_use_fof_difficulty_naming)
 			{
 				eof_note_type_name = eof_note_type_name_fof;
@@ -1830,7 +1819,7 @@ int eof_menu_file_preferences(void)
 			eof_preferences_dialog[38].flags = 0;					//Add new notes to selection
 			eof_preferences_dialog[39].flags = 0;					//Don't auto edit new lyrics
 			eof_preferences_dialog[40].flags = D_SELECTED;			//Click to change dialog focus
-			eof_preferences_dialog[41].flags = D_SELECTED;			//EOF leaving focus stops playback
+			eof_preferences_dialog[41].flags = D_SELECTED | D_DISABLED;	//Playback always continues in background
 			(void) snprintf(eof_etext3, sizeof(eof_etext3) - 1, "10000");	//Chord density threshold
 			eof_preferences_dialog[44].flags = D_SELECTED;			//Prefer MIDI friendly grid snaps
 			eof_preferences_dialog[45].flags = 0;					//GHL conversion swaps B/W gems
@@ -1844,7 +1833,6 @@ int eof_menu_file_preferences(void)
 			eof_preferences_dialog[53].flags = 0;					//Use FoF difficulty naming
 			eof_preferences_dialog[54].flags = D_SELECTED;			//Make lyric tails clickable
 			eof_preferences_dialog[55].flags = 0;					//CTRL+TAB skips empty tracks
-			eof_preferences_dialog[56].flags = 0;					//Don't check for updates
 		}//If the user clicked "Default
 	}while(retval == 2);	//Keep re-running the dialog until the user closes it with anything besides "Default"
 
@@ -2067,7 +2055,7 @@ int eof_menu_file_gp_preferences(void)
 	eof_pg_preferences_dialog[9].flags = eof_dont_auto_name_double_stops ? D_SELECTED : 0;		//Don't auto-name double stops
 	eof_pg_preferences_dialog[10].flags = eof_technote_auto_adjust ? D_SELECTED : 0;				//Auto-Adjust tech notes
 	eof_pg_preferences_dialog[11].flags = eof_fingering_checks_include_mutes ? D_SELECTED : 0;		//Fingering checks include mutes
-	eof_pg_preferences_dialog[12].flags = eof_render_2d_rs_piano_roll ? D_SELECTED : 0;				//2D render RS piano roll
+	eof_pg_preferences_dialog[12].flags = eof_render_2d_rs_piano_roll ? D_SELECTED : 0;			//2D render RS piano roll
 	eof_pg_preferences_dialog[13].flags = eof_dont_restrict_tone_change_timing ? D_SELECTED : 0;	//Don't restrict tone change timing
 
 	eof_log("\tLaunching Guitar Pro Preferences dialog", 2);
@@ -2099,7 +2087,7 @@ int eof_menu_file_gp_preferences(void)
 			eof_pg_preferences_dialog[6].flags = 0;					//Treat inverted chords as slash
 			eof_pg_preferences_dialog[7].flags = 0;					//3D render RS style chords
 			eof_pg_preferences_dialog[8].flags = D_SELECTED;		//Offer to auto complete fingering
-			eof_pg_preferences_dialog[9].flags = D_SELECTED;		//Don't auto-name double stops
+			eof_pg_preferences_dialog[9].flags = 0;					//Don't auto-name double stops
 			eof_pg_preferences_dialog[10].flags = D_SELECTED;		//Auto-Adjust tech notes
 			eof_pg_preferences_dialog[11].flags = 0;				//Fingering checks include mutes
 			eof_pg_preferences_dialog[12].flags = 0;				//2D render RS piano roll
@@ -2256,50 +2244,24 @@ void eof_apply_display_settings(int mode)
 
 int eof_ogg_settings(void)
 {
-	int retval;
-
 	eof_cursor_visible = 0;
 	eof_pen_visible = 0;
 	eof_render();
 	eof_color_dialog(eof_ogg_settings_dialog, gui_fg_color, gui_bg_color);
 	eof_conditionally_center_dialog(eof_ogg_settings_dialog);
 	eof_ogg_settings_dialog[3].d1 = eof_ogg_setting;
-	retval = eof_popup_dialog(eof_ogg_settings_dialog, 0);
-	eof_show_mouse(NULL);
-	eof_cursor_visible = 1;
-	eof_pen_visible = 1;
-	if(retval == 4)
+	if(eof_popup_dialog(eof_ogg_settings_dialog, 0) == 4)
 	{	//User clicked OK
 		eof_ogg_setting = eof_ogg_settings_dialog[3].d1;
 	}
-
-	return 0;	//User cancellation
-}
-
-int eof_ogg_settings_2(void)
-{
-	int retval;
-
-	eof_cursor_visible = 0;
-	eof_pen_visible = 0;
-	eof_render();
-	eof_color_dialog(eof_ogg_settings_2_dialog, gui_fg_color, gui_bg_color);
-	eof_conditionally_center_dialog(eof_ogg_settings_2_dialog);
-	eof_ogg_settings_2_dialog[3].d1 = eof_ogg_setting;
-	retval = eof_popup_dialog(eof_ogg_settings_2_dialog, 0);
+	else
+	{
+		return 0;
+	}
 	eof_show_mouse(NULL);
 	eof_cursor_visible = 1;
 	eof_pen_visible = 1;
-	if(retval == 4)
-	{	//User clicked OK
-		eof_ogg_setting = eof_ogg_settings_2_dialog[3].d1;
-	}
-	else if(retval == 5)
-	{	//User clicked Auto
-		return INT_MAX;
-	}
-
-	return 0;	//User cancellation
+	return 1;
 }
 
 int eof_menu_file_controllers(void)
@@ -3377,15 +3339,20 @@ int eof_new_chart(char * filename)
 	if((ret != 0) && exists(eof_ffmpeg_executable_path))
 	{	//If a suitably named OGG was not created successfully, but FFMPEG is linked
 		eof_log("\tAttempting to re-encode input audio with FFMPEG", 1);
-		replace_filename(oggfilename, eof_temp_path_s, get_filename(filename), sizeof(oggfilename));	//Build a path where the input audio file name is appended to the temp folder
-		(void) replace_extension(oggfilename, oggfilename, "ogg", sizeof(oggfilename));	//and its extension is changed to ogg
+		/* Keep the same destination name chosen by eof_audio_to_ogg().  The old
+		 * fallback used the source basename and then accidentally called
+		 * eof_audio_to_ogg() with dest_name as its input path and eof_etext3 as
+		 * its directory, which can make initial project audio creation fail. */
+		replace_filename(oggfilename, eof_temp_path_s, dest_name, sizeof(oggfilename));
 		if(eof_ffmpeg_convert_file(filename, oggfilename))
 		{	//If the input file couldn't be re-encoded to OGG with FFMPEG
 			(void) snprintf(eof_log_string, sizeof(eof_log_string) - 1, "\t\tFailed to re-encode \"%s\"", filename);
 			eof_log(eof_log_string, 1);
 		}
 		else
-			ret = eof_audio_to_ogg(dest_name, eof_etext3, dest_name, 1, 0);	//Try to load the freshly-created audio again
+		{
+			ret = 0;	//FFmpeg created the correctly named temporary OGG
+		}
 	}
 	if(ret != 0)	//If a suitably named OGG was not created successfully
 	{
@@ -3976,8 +3943,8 @@ int eof_save_helper_checks(void)
 	{	//If there are any pro guitar/bass notes and the user wants to save Rocksmith or Bandfuse capable files
 		for(ctr = 1; ctr < eof_song->tracks; ctr++)
 		{	//For each track
-			if(eof_track_is_pro_guitar_track(eof_song, ctr))
-			{	//If this is a pro guitar/bass track
+			if((ctr != EOF_TRACK_DRUM_DTX) && eof_track_is_pro_guitar_track(eof_song, ctr))
+			{	//If this is a standard pro guitar/bass track
 				if(eof_check_rs_sections_have_phrases(eof_song, ctr))
 				{	//If the user canceled adding missing phrases
 					break;	//Stop fixing them and break from loop
@@ -3994,7 +3961,7 @@ int eof_save_helper_checks(void)
 
 		for(ctr = 1; ctr < eof_song->tracks; ctr++)
 		{	//For each track
-			if(!eof_track_is_pro_guitar_track(eof_song, ctr))
+			if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
 				continue;	//If this is not a pro guitar/bass track, skip it
 
 			tracknum = eof_song->track[ctr]->tracknum;
@@ -4054,7 +4021,7 @@ int eof_save_helper_checks(void)
 		{	//For each track, or until the user is warned about an offending arpeggio
 			unsigned long notectr;
 
-			if(!eof_track_is_pro_guitar_track(eof_song, ctr))
+			if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
 				continue;	//If this is not a pro guitar/bass track, skip it
 
 			tracknum = eof_song->track[ctr]->tracknum;
@@ -4099,7 +4066,7 @@ int eof_save_helper_checks(void)
 		{	//For each track
 			unsigned long flags, noteset;
 
-			if(!eof_track_is_pro_guitar_track(eof_song, ctr))
+			if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
 				continue;	//If this is not a pro guitar/bass track, skip it
 
 			tracknum = eof_song->track[ctr]->tracknum;
@@ -4196,7 +4163,7 @@ int eof_save_helper_checks(void)
 			target = 2;
 		for(ctr = 1; !user_prompted && (ctr < eof_song->tracks); ctr++)
 		{	//For each track (until the user is warned about any offending chord names)
-			if(!eof_track_is_pro_guitar_track(eof_song, ctr))
+			if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
 				continue;	//If this is not a pro guitar/bass track, skip it
 
 			tracknum = eof_song->track[ctr]->tracknum;
@@ -4237,7 +4204,7 @@ int eof_save_helper_checks(void)
 
 		for(ctr = 1; !user_prompted && (ctr < eof_song->tracks); ctr++)
 		{	//For each track (until the user is warned about any offending handshape phrases)
-			if(!eof_track_is_pro_guitar_track(eof_song, ctr))
+			if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
 				continue;	//If this is not a pro guitar/bass track, skip it
 
 			tracknum = eof_song->track[ctr]->tracknum;
@@ -4339,7 +4306,7 @@ int eof_save_helper_checks(void)
 
 		for(ctr = 1; !user_prompted && (ctr < eof_song->tracks); ctr++)
 		{	//For each track (until the user is warned about any offending handshape phrases)
-			if(!eof_track_is_pro_guitar_track(eof_song, ctr))
+			if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
 				continue;	//If this is not a pro guitar/bass track, skip it
 
 			tracknum = eof_song->track[ctr]->tracknum;
@@ -4513,7 +4480,7 @@ int eof_save_helper_checks(void)
 
 		for(ctr = 1; !user_prompted && (ctr < eof_song->tracks); ctr++)
 		{	//For each track (until the user is warned about any offending bend notes)
-			if(!eof_track_is_pro_guitar_track(eof_song, ctr))
+			if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
 				continue;	//If this is not a pro guitar/bass track, skip it
 
 			tracknum = eof_song->track[ctr]->tracknum;
@@ -4563,7 +4530,7 @@ int eof_save_helper_checks(void)
 			unsigned long start, stop;
 			int sectionchange = 0, phrasechange = 0;
 
-			if(!eof_track_is_pro_guitar_track(eof_song, ctr))
+			if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
 				continue;	//If this is not a pro guitar/bass track, skip it
 
 			eof_process_beat_statistics(eof_song, ctr);	//Rebuild beat statistics from the perspective of this track
@@ -5513,10 +5480,11 @@ struct eof_guitar_pro_struct *eof_parsed_gp_file;
 DIALOG eof_gp_import_dialog[] =
 {
 	/* (proc)            (x)  (y)  (w)  (h)  (fg) (bg) (key) (flags) (d1) (d2) (dp)            (dp2) (dp3) */
-	{ eof_window_proc,0,   48,  500, 232, 2,   23,  0,    0,      0,   0,   "Import which GP track into the project's active track?",       NULL, NULL },
+	{ eof_window_proc,0,   48,  500, 255, 2,   23,  0,    0,      0,   0,   "Import which GP track into the project's active track?",       NULL, NULL },
 	{ d_agup_list_proc,  12,  84,  400, 138, 2,   23,  0,    0,      0,   0,   (void *)eof_gp_tracks_list, NULL, NULL },
 	{ d_agup_push_proc,  425, 84,  68,  28,  2,   23,  'i',  D_EXIT, 0,   0,   "&Import",      NULL, (void *)eof_gp_import_track },
-	{ d_agup_button_proc,12,  235, 240, 28,  2,   23,  '\r', D_EXIT, 0,   0,   "Cancel",       NULL, NULL },
+	{ d_agup_button_proc,12,  263, 240, 28,  2,   23,  '\r', D_EXIT, 0,   0,   "Cancel",       NULL, NULL },
+	{ d_agup_check_proc, 12,  230, 360, 20,  2,   23,  0,    0,      0,   0,   "Detect Crash Cymbals Used as Ride", NULL, NULL },
 	{ NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -6004,6 +5972,16 @@ int eof_gp_import_track(DIALOG * d)
 		return 0;
 
 	selected = eof_gp_import_dialog[1].d1;
+	if(eof_parsed_gp_file->instrument_types[selected] == 3)
+	{
+		eof_gp_detect_crash_as_ride = (eof_gp_import_dialog[4].flags & D_SELECTED) ? 1 : 0;
+		if(eof_gp_detect_crash_as_ride)
+			eof_dtx_warn_crash_as_ride_detection();
+	}
+	else
+	{
+		eof_gp_detect_crash_as_ride = 0;
+	}
 
 	//Parse the track to see which voices were populated, and if more than one is, prompt user which voice(s) to import
 	for(ctr = 0; ctr < eof_parsed_gp_file->track[selected]->notes; ctr++)
@@ -6096,8 +6074,15 @@ int eof_gp_import_common(const char *fn)
 	if(!fn)
 		return 1;	//If no file name is specified, return failure
 
+	/* Crash/ride inference is opt-in for each import, never sticky. */
+	eof_gp_detect_crash_as_ride = 0;
+	eof_gp_import_dialog[4].flags &= ~D_SELECTED;
+
 	tp = eof_song->pro_guitar_track[eof_song->track[eof_selected_track]->tracknum];
-	eof_parsed_gp_file = eof_load_gp(fn, &gp_import_undo_made);	//Parse the GP file, make an undo state if time signatures are imported
+	if(!ustricmp(get_extension(fn), "tg"))
+		eof_parsed_gp_file = eof_load_tg(fn, &gp_import_undo_made);	//Parse native TuxGuitar 2.x
+	else
+		eof_parsed_gp_file = eof_load_gp(fn, &gp_import_undo_made);	//Parse Guitar Pro/Go PlayAlong
 
 	if(eof_parsed_gp_file)
 	{	//The file was successfully parsed, allow the user to import a track into the active project
@@ -6139,14 +6124,16 @@ int eof_gp_import_common(const char *fn)
 		}
 
 //Choose which track to import
-		if(eof_parsed_gp_file->numtracks == 1)
-		{	//If the chosen Guitar Pro file has only one track, automatically select it for import
-			eof_log("\tAutomatically selecting the only track in the Guitar Pro file for import", 1);
+		if((eof_parsed_gp_file->numtracks == 1) && (eof_parsed_gp_file->instrument_types[0] != 3))
+		{	//A single non-drum track needs no choices, so keep the original automatic import
+			eof_log("\tAutomatically selecting the only non-drum track in the Guitar Pro file for import", 1);
 			eof_gp_import_dialog[1].d1 = 0;	//Select what would be the first track in the dialog list
 			eof_gp_import_track(&eof_gp_import_dialog[1]);	//Call the import logic for that track
 		}
 		else
-		{	//Otherwise launch the dialog to allow the user to select a track to import
+		{	//For drum tracks, also show the dialog so crash/ride detection can be explicitly enabled
+			if(eof_parsed_gp_file->numtracks == 1)
+				eof_gp_import_dialog[1].d1 = 0;
 			eof_color_dialog(eof_gp_import_dialog, gui_fg_color, gui_bg_color);
 			eof_conditionally_center_dialog(eof_gp_import_dialog);
 			if(eof_popup_dialog(eof_gp_import_dialog, 0) == 3)
@@ -6231,6 +6218,7 @@ int eof_gp_import_common(const char *fn)
 			eof_menu_edit_undo();	//If an undo state was made during the import, undo the modification
 			gp_import_undo_made = 0;	//And track that no modifications remain from the import
 		}
+		eof_gp_detect_crash_as_ride = 0;
 		allegro_message("Failure.  Check log for details.");
 		return 1;	//Return failure
 	}
@@ -6274,6 +6262,7 @@ int eof_gp_import_common(const char *fn)
 	(void) snprintf(eof_log_string, sizeof(eof_log_string) - 1, "\t\t%lu guitar/bass notes exist after cleanup", eof_get_track_size(eof_song, eof_selected_track));
 	eof_log(eof_log_string, 2);
 
+	eof_gp_detect_crash_as_ride = 0;
 	return 0;	//Return success
 }
 
@@ -6314,7 +6303,7 @@ int eof_menu_file_gp_import(void)
 			eof_log(eof_log_string, 1);
 		}
 	}
-	returnedfn = ncd_file_select(0, initial, "Import Guitar Pro", eof_filter_gp_files);
+	returnedfn = ncd_file_select(0, initial, "Import Guitar Pro / TuxGuitar", eof_filter_gp_files);
 	eof_clear_input();
 	if(returnedfn)
 	{	//If a file was selected for import
@@ -7332,14 +7321,6 @@ int eof_menu_file_export_guitar_pro(void)
 		}
 		if(!exists(eof_rs_to_tab_executable_path))
 			return 1;	//If RocksmithToTab is still not linked, return from this function
-	}
-
-	if((eof_get_track_size_normal(eof_song, EOF_TRACK_PRO_BASS) && !eof_get_pro_guitar_track_arrangement_type(eof_song, EOF_TRACK_PRO_BASS)) || (eof_get_track_size_normal(eof_song, EOF_TRACK_PRO_BASS_22) && !eof_get_pro_guitar_track_arrangement_type(eof_song, EOF_TRACK_PRO_BASS_22)))
-	{	//If either pro bass track is populated and has an undefined arrangement type
-		if(alert("Warning:  One of the bass tracks to be exported has no defined arrangement type.", "This will cause RocksmithToTab to export it as a guitar arrangement.", "It's recommended to manually define the arrangement type as bass first.  Continue?", "&Yes", "&No", 'y', 'n') != 1)
-		{	//If the user does not opt to continue
-			return 1;
-		}
 	}
 
 	//Create temporary XML files

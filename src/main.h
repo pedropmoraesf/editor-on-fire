@@ -435,7 +435,7 @@ extern unsigned    eof_min_note_distance_intervals;
 extern int         eof_render_bass_drum_in_lane;
 extern int         eof_inverted_chords_slash;
 extern int         eof_click_changes_dialog_focus;
-extern int         eof_stop_playback_leave_focus;
+extern int         eof_stop_playback_leave_focus;	//Legacy config compatibility; forced off so playback continues in background
 extern int         eof_render_3d_rs_chords;
 extern int         eof_render_2d_rs_piano_roll;
 extern int         eof_dont_restrict_tone_change_timing;
@@ -447,7 +447,6 @@ extern int         eof_display_seek_pos_in_seconds;
 extern int         eof_note_tails_clickable;
 extern int         eof_lyric_tails_clickable;
 extern int         eof_ctrl_tab_skip_empty_tracks;
-extern int         eof_dont_check_for_updates;
 extern int         eof_auto_complete_fingering;
 extern int         eof_dont_auto_name_double_stops;
 extern int         eof_section_auto_adjust;
@@ -825,7 +824,7 @@ unsigned long eof_count_selected_and_unselected_notes(unsigned long *total);
 	//Returns the number of notes selected in the active track difficulty, sets values in the eof_selection structure
 	//If total is not NULL, its value is incremented once for each note in the active difficulty, regardless of whether it's selected (to count the number of notes in the active difficulty)
 	//Reset *total to 0 before calling if the intention is to get a count of all notes in the active track difficulty
-unsigned long eof_count_selected_notes_a(unsigned long track, unsigned char diff);
+unsigned long eof_count_selected_notes(unsigned long track, unsigned char diff);
 	//Returns the number of notes in the specified track difficulty that are selected, or 0 upon error
 unsigned long eof_get_selected_note_range(unsigned long *sel_start, unsigned long *sel_end, char function);
 	//Returns the number of notes in the active track difficulty that are explicitly selected, allowing an easy way to check if some number of them are selected

@@ -1,7 +1,9 @@
 CC = gcc
-CFLAGS = -Wall -O2 -fomit-frame-pointer -ffast-math -funroll-loops -mwindows -static -static-libgcc -static-libstdc++ -flto -Ialogg/include -DEOF_BUILD -DALLEGRO_STATICLINK
+
+
+CFLAGS = -Wall -O2 -fomit-frame-pointer -ffast-math -funroll-loops -mwindows -static -static-libgcc -static-libstdc++ -flto -Ialogg/include $(shell pkg-config --cflags libxml-2.0) -DLIBXML_STATIC -DEOF_BUILD -DALLEGRO_STATICLINK
 CXXFLAGS = $(CFLAGS)
-LIBS = -lalleg -logg -lvorbisfile -lvorbis -lm -lfftw3 -lrubberband -lstdc++ -lsamplerate -lddraw -ldsound -ldinput -ldxguid -lole32 -lwinmm
+LIBS = -lalleg -lvorbisfile -lvorbis -logg -lfftw3 -lrubberband -lstdc++ -lm -lddraw -ldsound -ldinput -ldxguid -lole32 -lwinmm $(shell pkg-config --static --libs libxml-2.0) -lz
 
 include makefile.common
 

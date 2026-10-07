@@ -653,6 +653,8 @@ int eof_export_midi(EOF_SONG * sp, char * fn, char featurerestriction, char fixv
 			continue;	//Skip the track
 		if(j == EOF_TRACK_PRO_GUITAR_B)		//If this is the bonus pro guitar track
 			continue;	//Skip the track
+		if(j == EOF_TRACK_DRUM_DTX)
+			continue;	//The dedicated DTX source track is not a Rock Band/Phase Shift MIDI arrangement
 		if(eof_track_overridden_by_stored_MIDI_track(sp, j))	//If this track is overridden by a stored MIDI track
 			continue;	//Skip the track
 		if(!featurerestriction && !format && eof_track_is_ghl_mode(sp, j))
@@ -3056,6 +3058,8 @@ int eof_export_music_midi(EOF_SONG *sp, char *fn, char format)
 
 			if(eof_get_track_size_normal(sp, j) == 0)	//If this track has no notes (in the normal note set)
 				continue;	//Skip the track
+			if(j == EOF_TRACK_DRUM_DTX)
+				continue;	//DTX frets are General MIDI percussion numbers, not guitar tablature
 			if((!eof_track_is_pro_guitar_track(sp, j)) && !eof_track_is_vocal_track(sp, j) && !eof_track_is_drum(sp, j))	//If this isn't a vocal, pro guitar or drum track
 				continue;	//Skip the track
 			if(eof_track_overridden_by_stored_MIDI_track(sp, j))	//If this track is overridden by a stored MIDI track
@@ -4414,12 +4418,12 @@ int eof_apply_ts(unsigned num, unsigned den, unsigned long beatnum, EOF_SONG *sp
 	return 1;
 }
 
-int eof_get_effective_ks(EOF_SONG *sp, char *ks, unsigned long pos)
+int eof_get_effective_ks(EOF_SONG *sp, char *key, unsigned long pos)
 {
 	char current_key = 0, key_defined = 0;
 	unsigned long beat;
 
-	if((sp == NULL) || !ks)
+	if((sp == NULL) || !key)
 		return 0;	//Return error
 
 	for(beat = 0; beat < sp->beats; beat++)
@@ -4436,7 +4440,7 @@ int eof_get_effective_ks(EOF_SONG *sp, char *ks, unsigned long pos)
 
 	if(key_defined)
 	{	//If a key signature was in effect at the target position
-		*ks = current_key;	//Return it to the calling function by reference
+		*key = current_key;	//Return it to the calling function by reference
 		return 1;	//Return key signature found
 	}
 

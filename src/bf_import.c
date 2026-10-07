@@ -68,7 +68,7 @@ int eof_bf_qsort_time_changes(const void * e1, const void * e2)
 	return 0;
 }
 
-char *eof_lookup_bf_string_key(struct bf_string *ptr, unsigned long arraysize, unsigned long long keyvalue)
+char *eof_lookup_bf_string_key(struct bf_string *ptr, unsigned long arraysize, unsigned long long key)
 {
 	unsigned long ctr;
 	char *result = NULL;
@@ -78,7 +78,7 @@ char *eof_lookup_bf_string_key(struct bf_string *ptr, unsigned long arraysize, u
 
 	for(ctr = 0; ctr < arraysize; ctr++)
 	{	//For each string in the array
-		if(ptr[ctr].indkey == keyvalue)
+		if(ptr[ctr].indkey == key)
 		{	//If the string has the target key
 			result = ptr[ctr].string;
 			break;

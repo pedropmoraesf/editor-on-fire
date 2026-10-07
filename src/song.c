@@ -48,6 +48,8 @@ EOF_TRACK_ENTRY eof_default_tracks[EOF_TRACKS_MAX + 1] =
 	{EOF_PRO_GUITAR_TRACK_FORMAT, EOF_PRO_GUITAR_TRACK_BEHAVIOR, EOF_TRACK_PRO_GUITAR_22, 0, "PART REAL_GUITAR_22", "", 0xFF, 5, 0},
 	{EOF_LEGACY_TRACK_FORMAT, EOF_DRUM_TRACK_BEHAVIOR, EOF_TRACK_DRUM_PS, 0, "PART REAL_DRUMS_PS", "", 0xFF, 5, 0},
 	{EOF_PRO_GUITAR_TRACK_FORMAT, EOF_PRO_GUITAR_TRACK_BEHAVIOR, EOF_TRACK_PRO_GUITAR_B, 0, "PART REAL_GUITAR_BONUS", "", 0xFF, 5, 0},
+	{EOF_PRO_GUITAR_TRACK_FORMAT, EOF_PRO_GUITAR_TRACK_BEHAVIOR, EOF_TRACK_DRUM_DTX, 0, "PART_REAL_DRUM_DTX", "", 0xFF, 5, 0},
+	{EOF_PRO_GUITAR_TRACK_FORMAT, EOF_PRO_GUITAR_TRACK_BEHAVIOR, EOF_TRACK_PRO_GUITAR_22_BONUS, 0, "PART_REAL_GUITAR_22_BONUS", "", 0xFF, 5, EOF_TRACK_FLAG_RS_BONUS_ARR | EOF_TRACK_FLAG_RS_ALT_ARR},
 
 	//This pro format is not supported yet, but the entry describes the track's details
 	{EOF_PRO_KEYS_TRACK_FORMAT, EOF_PRO_KEYS_TRACK_BEHAVIOR, EOF_TRACK_PRO_KEYS, 0, "PART REAL_KEYS", "", 0xFF, 5, 0}
@@ -423,6 +425,24 @@ EOF_SONG * eof_load_song(const char * fn)
 			if(eof_song_add_track(sp,&eof_default_tracks[EOF_TRACK_PRO_GUITAR_B]) == 0)	//Add a blank bonus pro guitar track
 			{	//If the track failed to be added
 				eof_destroy_song(sp);	//Destroy the song and return on error
+				(void) pack_fclose(fp);
+				return NULL;
+			}
+		}
+		if(EOF_TRACK_DRUM_DTX >= sp->tracks)
+		{	//If the chart predates the dedicated DTXMania drum track
+			if(eof_song_add_track(sp,&eof_default_tracks[EOF_TRACK_DRUM_DTX]) == 0)
+			{
+				eof_destroy_song(sp);
+				(void) pack_fclose(fp);
+				return NULL;
+			}
+		}
+		if(EOF_TRACK_PRO_GUITAR_22_BONUS >= sp->tracks)
+		{	//If the chart predates the dedicated alternate 22-fret lead arrangement
+			if(eof_song_add_track(sp, &eof_default_tracks[EOF_TRACK_PRO_GUITAR_22_BONUS]) == 0)
+			{
+				eof_destroy_song(sp);
 				(void) pack_fclose(fp);
 				return NULL;
 			}
@@ -1717,13 +1737,17 @@ int eof_song_add_track(EOF_SONG * sp, EOF_TRACK_ENTRY * trackdetails)
 				maxfrets1 = 22;	//They only support 22 frets in the 22 fret track (ie. for Squier guitar controller)
 				maxfrets2 = 17;	//And 17 frets in the 17 fret track (ie. for Mustang guitar controller)
 			}
-			if((trackdetails->track_type == EOF_TRACK_PRO_BASS_22) || (trackdetails->track_type == EOF_TRACK_PRO_GUITAR_22) || (trackdetails->track_type == EOF_TRACK_PRO_GUITAR_B))
+			if((trackdetails->track_type == EOF_TRACK_PRO_BASS_22) || (trackdetails->track_type == EOF_TRACK_PRO_GUITAR_22) || (trackdetails->track_type == EOF_TRACK_PRO_GUITAR_B) || (trackdetails->track_type == EOF_TRACK_PRO_GUITAR_22_BONUS))
 			{	//If this is a track supporting more than 17 frets
 				ptr4->numfrets = maxfrets1;
 			}
 			else
 			{	//Otherwise assume a default max fret of 17 (ie. Mustang controller)
 				ptr4->numfrets = maxfrets2;
+			}
+			if(trackdetails->track_type == EOF_TRACK_DRUM_DTX)
+			{	//The DTX track stores General MIDI percussion note numbers in the fret field.
+				ptr4->numfrets = 127;
 			}
 			if((trackdetails->track_type == EOF_TRACK_PRO_BASS) || (trackdetails->track_type == EOF_TRACK_PRO_BASS_22))
 			{
@@ -1733,6 +1757,8 @@ int eof_song_add_track(EOF_SONG * sp, EOF_TRACK_ENTRY * trackdetails)
 			else
 			{
 				ptr4->numstrings = 6;	//Otherwise, assume a 6 string guitar
+				if(trackdetails->track_type == EOF_TRACK_PRO_GUITAR_22_BONUS)
+					ptr4->arrangement = EOF_LEAD_ARRANGEMENT;
 			}
 			if(ptr4->numstrings > EOF_TUNING_LENGTH)	//Ensure that the tuning array is large enough
 			{
@@ -3959,7 +3985,15 @@ int eof_save_song(EOF_SONG * sp, const char * fn)
 	}
 	//Determine how many tracks need to be written
 	track_count = sp->tracks;
-	if((sp->tracks > EOF_TRACK_PRO_GUITAR_B) && !eof_get_track_size_all(sp, EOF_TRACK_PRO_GUITAR_B))
+	if((track_count > EOF_TRACK_PRO_GUITAR_22_BONUS) && !eof_get_track_size_all(sp, EOF_TRACK_PRO_GUITAR_22_BONUS))
+	{	//Keep the new alternate lead track out of older project files when it is unused.
+		track_count = EOF_TRACK_PRO_GUITAR_22_BONUS;
+	}
+	if((track_count > EOF_TRACK_DRUM_DTX) && !eof_get_track_size_all(sp, EOF_TRACK_DRUM_DTX))
+	{	//Keep an empty DTX track out of the file so projects that don't use it stay compatible with older EOF builds.
+		track_count = EOF_TRACK_DRUM_DTX;
+	}
+	if((track_count > EOF_TRACK_PRO_GUITAR_B) && (track_count <= EOF_TRACK_DRUM_DTX) && !eof_get_track_size_all(sp, EOF_TRACK_PRO_GUITAR_B))
 	{	//If the project has a bonus pro guitar track, but it has no notes or tech notes
 		omit_bonus = 1;	//That track will not be written to the project file
 	}
@@ -8693,76 +8727,12 @@ void eof_set_num_kick_drum_lanes(EOF_SONG *sp, unsigned long track, unsigned lon
 	}
 }
 
-int eof_adjust_note_slide(EOF_PRO_GUITAR_TRACK *tp, unsigned long notenum, int fret_diff)
-{
-	unsigned long flags;
-	int retval = 1, invalid = 0;
-	EOF_PRO_GUITAR_NOTE *np;
-
-	if(!tp || (notenum >= tp->notes) || !fret_diff)
-		return 0;	//Invalid parameters, no adjustments will be made
-
-	np = tp->note[notenum];	//Simplify
-	flags = np->flags;
-	if((flags & EOF_PRO_GUITAR_NOTE_FLAG_RS_NOTATION) && (flags & (EOF_PRO_GUITAR_NOTE_FLAG_SLIDE_UP | EOF_PRO_GUITAR_NOTE_FLAG_SLIDE_DOWN)) && np->slideend)
-	{	//If this note has a defined pitched slide
-		retval = 1;	//A note will be modified
-		if(fret_diff < 0)
-		{
-			if(abs(fret_diff) >= np->slideend)
-			{	//If the change would bring the slide end position at or below fret 0
-				invalid = 1;
-			}
-		}
-		else if(np->slideend + fret_diff > tp->numfrets)
-		{	//If the change would bring the slide end position above the track's fret limit
-			invalid = 1;
-		}
-		if(invalid)
-		{
-			np->flags |= EOF_NOTE_FLAG_HIGHLIGHT;	//Apply highlight status
-		}
-		else
-		{
-			np->slideend += fret_diff;	//Adjust the slide's ending by the same number of frets that the note was changed
-		}
-	}
-	if((flags & EOF_PRO_GUITAR_NOTE_FLAG_UNPITCH_SLIDE) && np->unpitchend)
-	{	//If this note has a defined unpitched slide
-		retval = 1;	//A note will be modified
-		if(fret_diff < 0)
-		{
-			if(abs(fret_diff) >= np->unpitchend)
-			{	//If the change would bring the slide end position at or below fret 0
-				invalid = 1;
-			}
-		}
-		else if(np->unpitchend + fret_diff > tp->numfrets)
-		{	//If the change would bring the slide end position above the track's fret limit
-			invalid = 1;
-		}
-		if(invalid)
-		{
-			np->flags |= EOF_NOTE_FLAG_HIGHLIGHT;	//Apply highlight status
-		}
-		else
-		{
-			np->unpitchend += fret_diff;	//Adjust the slide's ending by the same number of frets that the note was changed
-		}
-	}
-	if(invalid)
-		retval = -1;	//If either slide type failed to transpose, it will be considered a failure
-
-	return retval;
-}
-
 void eof_set_pro_guitar_fret_or_finger_number(char function, unsigned long value)
 {
 	unsigned long ctr, ctr2, bitmask, tracknum;
 	char undo_made = 0;
 	unsigned char oldvalue = 0, newvalue = 0;
-	int note_selection_updated, fret_diff = 0;;
-	EOF_PRO_GUITAR_TRACK *tp;
+	int note_selection_updated;
 
  	eof_log("eof_set_pro_guitar_fret_or_finger_number() entered", 1);
 
@@ -8775,32 +8745,31 @@ void eof_set_pro_guitar_fret_or_finger_number(char function, unsigned long value
 
 	note_selection_updated = eof_update_implied_note_selection();	//If no notes are selected, take start/end selection and Feedback input mode into account
 	tracknum = eof_song->track[eof_selected_track]->tracknum;
-	tp = eof_song->pro_guitar_track[tracknum];	//Simplify
-	for(ctr = 0; ctr <tp->notes; ctr++)
+	for(ctr = 0; ctr < eof_song->pro_guitar_track[tracknum]->notes; ctr++)
 	{	//For each note in the active pro guitar track
-		if((eof_selection.track != eof_selected_track) || !eof_selection.multi[ctr] || (tp->note[ctr]->type != eof_note_type))
+		if((eof_selection.track != eof_selected_track) || !eof_selection.multi[ctr] || (eof_song->pro_guitar_track[tracknum]->note[ctr]->type != eof_note_type))
 			continue;	//If the note is not selected, skip it
 
 		for(ctr2 = 0, bitmask = 1; ctr2 < 6; ctr2++, bitmask<<=1)
 		{	//For each of the 6 usable strings
-			if(!(tp->note[ctr]->note & bitmask) || !(eof_pro_guitar_fret_bitmask & bitmask))
+			if(!(eof_song->pro_guitar_track[tracknum]->note[ctr]->note & bitmask) || !(eof_pro_guitar_fret_bitmask & bitmask))
 				continue;	//If this string is not in use or it is not enabled for fret shortcut manipulation, skip it
 
 			if(eof_fingering_view)
 			{	//If fingering view is in effect, alter the finger value
 				if(value == 0)
 					value = 5;	//Convert from Rocksmith's numbering (0 = thumb) to EOF's numbering (5 = thumb)
-				oldvalue =tp->note[ctr]->finger[ctr2];	//Simplify
+				oldvalue = eof_song->pro_guitar_track[tracknum]->note[ctr]->finger[ctr2];	//Simplify
 				if(!undo_made && (value != oldvalue))
 				{	//Make an undo state before making the first change
 					eof_prepare_undo(EOF_UNDO_TYPE_NONE);
 					undo_made = 1;
 				}
-				tp->note[ctr]->finger[ctr2] = value;	//Update the string's finger value
+				eof_song->pro_guitar_track[tracknum]->note[ctr]->finger[ctr2] = value;	//Update the string's finger value
 			}
 			else
 			{	//Otherwise edit the fret value
-				oldvalue = tp->note[ctr]->frets[ctr2];
+				oldvalue = eof_song->pro_guitar_track[tracknum]->note[ctr]->frets[ctr2];
 				newvalue = oldvalue;
 
 				if(function && (oldvalue == 0xFF))	//Don't allow a muted gem with no defined fret value to be incremented/decremented
@@ -8814,34 +8783,26 @@ void eof_set_pro_guitar_fret_or_finger_number(char function, unsigned long value
 
 					case 1:	//Increment fret value
 						if(oldvalue != 0xFF)	//Don't increment a muted note
-						{
 							newvalue++;
-							fret_diff = 1;
-						}
 					break;
 
 					case 2:	//Decrement fret value
 						if(oldvalue > 0)	//Don't decrement an open note
-						{
 							newvalue--;
-							fret_diff = -1;
-						}
 					break;
 
 					default:
 					break;
 				}
-				if(((newvalue & 0x7F) <= tp->numfrets) || (newvalue == 0xFF))
+				if(((newvalue & 0x7F) <= eof_song->pro_guitar_track[tracknum]->numfrets) || (newvalue == 0xFF))
 				{	//Only set the fret value (when masking out the mute bit) if it is valid
 					if(!undo_made && (newvalue != oldvalue))
 					{	//Make an undo state before making the first change
 						eof_prepare_undo(EOF_UNDO_TYPE_NONE);
 						undo_made = 1;
 					}
-					tp->note[ctr]->frets[ctr2] = newvalue;		//Update the string's fret value
-					memset(tp->note[ctr]->finger, 0, 8);		//Initialize all fingers to undefined
-
-					(void) eof_adjust_note_slide(tp, ctr, fret_diff);		//Increment/decrement the note's slide end position if applicable, highlight the note if its slide fails to be adjusted
+					eof_song->pro_guitar_track[tracknum]->note[ctr]->frets[ctr2] = newvalue;		//Update the string's fret value
+					memset(eof_song->pro_guitar_track[tracknum]->note[ctr]->finger, 0, 8);		//Initialize all fingers to undefined
 				}
 			}
 		}
@@ -11550,7 +11511,7 @@ char eof_pro_guitar_tech_note_overlaps_a_note(EOF_PRO_GUITAR_TRACK *tp, unsigned
 			eof_menu_pro_guitar_track_set_tech_view_state(tp, restore_tech_view);	//Re-enable tech view if applicable
 			return 1;	//Return overlap found at start of note
 		}
-		if(techpos <= np->pos + notelen)
+		if((techpos >= np->pos) && (techpos <= np->pos + notelen))
 		{	//If the tech note overlaps this regular note
 			if(note_num)
 			{	//If the calling function passed a non NULL pointer
@@ -12935,16 +12896,14 @@ int eof_pro_guitar_note_derive_string_fingering(EOF_SONG *sp, unsigned long trac
 	}
 
 	if(arpeggio_base)
-	{
 		arpeggio_base_fret = arpeggio_base->frets[stringnum] & 0x7F;	//Store this with the mute bit masked out
-		if(arpeggio_base_fret == 0)
-		{	//If this gem is within an arpeggio/handshape that does not use the specified string
-			return -3;	//The specified gem violates the arpeggio/handshape
-		}
-		if(arpeggio_base_fret != fret)
-		{	//If this gem is within an arpeggio/handshape but does not use the same fret as the base chord
-			return -4;	//The specified fret violates the arpeggio/handshape
-		}
+	if(arpeggio_base && (arpeggio_base_fret == 0))
+	{	//If this gem is within an arpeggio/handshape that does not use the specified string
+		return -3;	//The specified gem violates the arpeggio/handshape
+	}
+	if(arpeggio_base && (arpeggio_base_fret != fret))
+	{	//If this gem is within an arpeggio/handshape but does not use the same fret as the base chord
+		return -4;	//The specified fret violates the arpeggio/handshape
 	}
 	if(*result)
 	{	//If the string has a fingering defined
@@ -13384,18 +13343,4 @@ unsigned long eof_get_pos_num_notes_after_timestamp(EOF_SONG *sp, unsigned long 
 	eof_menu_track_set_tech_view_state(sp, track, restore_tech_view);	//Re-enable tech view if applicable
 
 	return foundpos;	//Return the position that was found, if any
-}
-
-unsigned long eof_get_pro_guitar_track_arrangement_type(EOF_SONG *sp, unsigned long track)
-{
-	EOF_PRO_GUITAR_TRACK *tp;
-
-	if((sp == NULL) || !track || (track >= sp->tracks))
-		return ULONG_MAX;
-	if(!eof_track_is_pro_guitar_track(sp, track))
-		return ULONG_MAX;
-
-	tp = sp->pro_guitar_track[sp->track[track]->tracknum];	//Simplify
-
-	return tp->arrangement;
 }

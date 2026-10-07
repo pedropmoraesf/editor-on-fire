@@ -1,0 +1,2 @@
+C:/msys64/mingw32/bin/ar.exe qc ../../lib/libjpgalleg.a CMakeFiles/jpgalleg.dir/src/decode.c.obj CMakeFiles/jpgalleg.dir/src/encode.c.obj CMakeFiles/jpgalleg.dir/src/error.c.obj CMakeFiles/jpgalleg.dir/src/init.c.obj CMakeFiles/jpgalleg.dir/src/io.c.obj CMakeFiles/jpgalleg.dir/src/jpgalleg.c.obj
+C:/msys64/mingw32/bin/ranlib.exe ../../lib/libjpgalleg.a

@@ -114,6 +114,8 @@ MENU eof_track_selected_menu[EOF_TRACKS_MAX] =
 	{eof_track_selected_menu_text[11], eof_menu_track_selected_12, NULL, D_USER, NULL},
 	{eof_track_selected_menu_text[12], eof_menu_track_selected_13, NULL, D_USER, NULL},
 	{eof_track_selected_menu_text[13], eof_menu_track_selected_14, NULL, D_USER, NULL},
+	{eof_track_selected_menu_text[14], eof_menu_track_selected_15, NULL, D_USER, NULL},
+	{eof_track_selected_menu_text[15], eof_menu_track_selected_16, NULL, D_USER, NULL},
 	{NULL, NULL, NULL, 0, NULL}
 };
 
@@ -208,6 +210,8 @@ MENU eof_song_menu[] =
 	{"Pro &Guitar", NULL, eof_song_proguitar_menu, 0, NULL},
 	{"&Rocksmith", NULL, eof_song_rocksmith_menu, 0, NULL},
 	{"Second &Piano roll", NULL, eof_song_piano_roll_menu, 0, NULL},
+	{"Spectrogram (experimental)", eof_menu_song_spectrogram_experimental, NULL, D_USER, NULL},
+	{"Auto-sync notes (Experimental HQ)", eof_menu_song_spectrogram_auto_sync, NULL, 0, NULL},
 	{"Manage raw MIDI tracks", eof_menu_song_raw_MIDI_tracks, NULL, 0, NULL},
 	{"Place floating event", eof_menu_song_add_floating_text_event, NULL, 0, NULL},
 	{"", NULL, NULL, 0, NULL},
@@ -590,6 +594,7 @@ void eof_prepare_song_menu(void)
 		}
 
 		eof_song_piano_roll_menu[0].flags = eof_display_second_piano_roll ? D_SELECTED : 0;	//Update "Song>Second piano roll>Display" check status
+		eof_song_menu[17].flags = eof_display_spectrogram_experimental ? D_SELECTED : 0;	//Experimental spectrogram toggle
 		eof_song_piano_roll_menu[2].flags = eof_sync_piano_rolls ? D_SELECTED : 0;			//Update "Song>Second piano roll>Sync with main piano roll" check status
 		eof_song_rocksmith_menu[0].flags = eof_fingering_view ? D_SELECTED : 0;				//Update "Song>Rocksmith>Fingering view"
 		eof_song_rocksmith_menu[1].flags = eof_flat_dd_view ? D_SELECTED : 0;				//Update "Song>Rocksmith>Flat DD view"
@@ -1450,6 +1455,17 @@ int eof_menu_track_selected_14(void)
 	return eof_menu_track_selected_track_number(14, 1);
 }
 
+int eof_menu_track_selected_15(void)
+{
+	return eof_menu_track_selected_track_number(15, 1);
+}
+
+int eof_menu_track_selected_16(void)
+{
+	return eof_menu_track_selected_track_number(16, 1);
+}
+
+
 int eof_menu_track_selected_track_number(unsigned long tracknum, int updatetitle)
 {
 	unsigned long i;
@@ -1931,44 +1947,179 @@ int eof_menu_song_waveform(void)
 	return 0;	//Return success
 }
 
+static int eof_spectrogram_matches_legacy(void)
+{
+	if(!eof_spectrogram || !eof_spectrogram->oggfilename)
+		return 0;
+	if(ustricmp(eof_spectrogram->oggfilename, eof_loaded_ogg_name))
+		return 0;
+	if(eof_spectrogram->window_function)
+		return 0;
+	if((eof_spectrogram->windowsize != eof_spectrogram_windowsize) ||
+	   (eof_spectrogram->hopsize != eof_spectrogram_windowsize))
+		return 0;
+	return 1;
+}
+
+static int eof_spectrogram_matches_experimental(void)
+{
+	if(!eof_spectrogram || !eof_spectrogram->oggfilename)
+		return 0;
+	if(ustricmp(eof_spectrogram->oggfilename, eof_loaded_ogg_name))
+		return 0;
+	if(!eof_spectrogram->window_function)
+		return 0;
+	if((eof_spectrogram->windowsize != EOF_EXPERIMENTAL_SPECTROGRAM_WINDOWSIZE) ||
+	   (eof_spectrogram->hopsize != EOF_EXPERIMENTAL_SPECTROGRAM_HOPSIZE))
+		return 0;
+	return 1;
+}
+
 int eof_menu_song_spectrogram(void)
 {
 	if(!eof_song_loaded || eof_silence_loaded)
-		return 1;	//Return error
+		return 1;
 
 	if(eof_display_spectrogram == 0)
 	{
-		if(eof_music_paused)
-		{	//Don't try to generate the spectrogram data if the chart is playing
-			if(eof_spectrogram == NULL)
-			{
-				eof_spectrogram = eof_create_spectrogram(eof_loaded_ogg_name);	//Generate 1ms spectrogram data from the current audio file
-			}
-			else if(ustricmp(eof_spectrogram->oggfilename,eof_loaded_ogg_name) != 0)
-			{	//If the user opened a different OGG file since the spectrogram data was generated
-				eof_destroy_spectrogram(eof_spectrogram);
-				eof_spectrogram = eof_create_spectrogram(eof_loaded_ogg_name);	//Generate 1ms spectrogram data from the current audio file
-			}
+		if(!eof_spectrogram_matches_legacy() && eof_music_paused)
+		{
+			eof_destroy_spectrogram(eof_spectrogram);
+			eof_spectrogram = eof_create_spectrogram(eof_loaded_ogg_name);
 		}
 
-		if(eof_spectrogram != NULL)
+		if(eof_spectrogram_matches_legacy())
 		{
+			eof_display_spectrogram_experimental = 0;
 			eof_display_spectrogram = 1;
-			eof_spectrogram_menu[0].flags = D_SELECTED;	//Check the Show item in the Song>Waveform graph menu
+			eof_spectrogram_menu[0].flags = D_SELECTED;
 		}
 	}
 	else
 	{
 		eof_display_spectrogram = 0;
-		eof_spectrogram_menu[0].flags = 0;	//Clear the Show item in the Song>Waveform graph menu
+		eof_spectrogram_menu[0].flags = 0;
 	}
 
 	if(eof_music_paused)
 		eof_render();
 	eof_fix_window_title();
-	eof_close_menu = 1;		//Force the main menu to close, as this function had a tendency to get hung in the menu logic when activated by keyboard
+	eof_close_menu = 1;
 
-	return 0;	//Return success
+	return 0;
+}
+
+int eof_menu_song_spectrogram_experimental(void)
+{
+	if(!eof_song_loaded || eof_silence_loaded)
+		return 1;
+
+	if(eof_display_spectrogram_experimental == 0)
+	{
+		if(!eof_spectrogram_matches_experimental() && eof_music_paused)
+		{
+			eof_log("Generating experimental Hann/overlap spectrogram", 1);
+			eof_destroy_spectrogram(eof_spectrogram);
+			eof_spectrogram = eof_create_spectrogram_experimental(eof_loaded_ogg_name);
+		}
+
+		if(eof_spectrogram_matches_experimental())
+		{
+			eof_display_spectrogram = 0;
+			eof_spectrogram_menu[0].flags = 0;
+			eof_display_spectrogram_experimental = 1;
+			if(!eof_spectrogram->experimental_cache)
+			{
+				(void) alert("Spectrogram (Experimental HQ)",
+					"The accelerated display cache could not be created.",
+					"Full quality is preserved, but playback may lag while this spectrogram is visible.",
+					"OK", NULL, 0, KEY_ENTER);
+				eof_clear_input();
+			}
+		}
+	}
+	else
+	{
+		eof_display_spectrogram_experimental = 0;
+	}
+
+	if(eof_music_paused)
+		eof_render();
+	eof_fix_window_title();
+	eof_close_menu = 1;
+
+	return 0;
+}
+
+int eof_menu_song_spectrogram_auto_sync(void)
+{
+	unsigned long selected_count, considered = 0, moved = 0;
+	double mean_shift = 0.0;
+	char selected_only;
+	char line1[192], line2[192];
+	int result;
+
+	if(!eof_song_loaded || eof_silence_loaded || !eof_song)
+		return 1;
+	if(!eof_music_paused)
+	{
+		(void) alert("Auto-sync notes (Experimental HQ)", "Pause playback before running audio analysis.", NULL, "OK", NULL, 0, KEY_ENTER);
+		eof_clear_input();
+		return 1;
+	}
+	if(eof_menu_track_get_tech_view_state(eof_song, eof_selected_track))
+	{
+		(void) alert("Auto-sync notes (Experimental HQ)", "Disable tech view before synchronizing normal notes.", "Tech notes are preserved with their parent notes when auto-adjust is enabled.", "OK", NULL, 0, KEY_ENTER);
+		eof_clear_input();
+		return 1;
+	}
+
+	selected_count = eof_count_selected_notes(eof_selected_track, eof_note_type);
+	selected_only = selected_count ? 1 : 0;
+
+	if(selected_only)
+		(void) snprintf(line1, sizeof(line1) - 1, "Synchronize %lu selected note/chord events to the audio?", selected_count);
+	else
+		(void) snprintf(line1, sizeof(line1) - 1, "No notes are selected. Synchronize the active track difficulty?");
+
+	(void) snprintf(line2, sizeof(line2) - 1,
+		"HQ refine: onset + instrument bands/chroma + trajectory/spacing constraints, max 180 ms.");
+	eof_clear_input();
+	if(alert("Auto-sync notes (Experimental HQ)", line1, line2, "&Sync", "&Cancel", 's', 'c') != 1)
+	{
+		eof_clear_input();
+		return 1;
+	}
+	eof_clear_input();
+
+	result = eof_spectrogram_auto_sync_notes(eof_loaded_ogg_name, eof_selected_track, eof_note_type,
+		selected_only, 180UL, &considered, &moved, &mean_shift);
+	eof_fix_window_title();
+
+	if(result)
+	{
+		(void) alert("Auto-sync notes (Experimental HQ)", "High-resolution audio analysis could not be completed.", "No timing changes were applied.", "OK", NULL, 0, KEY_ENTER);
+		eof_clear_input();
+		return 1;
+	}
+
+	if(!moved)
+	{
+		(void) snprintf(line1, sizeof(line1) - 1, "%lu note/chord events were examined.", considered);
+		(void) alert("Auto-sync notes (Experimental HQ)", line1, "No sufficiently confident timing correction was found.", "OK", NULL, 0, KEY_ENTER);
+	}
+	else
+	{
+		(void) snprintf(line1, sizeof(line1) - 1, "Adjusted %lu of %lu note/chord events.", moved, considered);
+		(void) snprintf(line2, sizeof(line2) - 1, "Mean absolute correction: %.1f ms. Use Undo if you prefer the previous timing.", mean_shift);
+		(void) alert("Auto-sync notes (Experimental HQ)", line1, line2, "OK", NULL, 0, KEY_ENTER);
+	}
+	eof_clear_input();
+
+	eof_song_reapply_all_dynamic_highlighting();
+	eof_fix_window_title();
+	eof_render();
+	return 0;
 }
 
 unsigned long eof_leading_silence_dialog_amount;
@@ -1985,7 +2136,7 @@ DIALOG eof_leading_silence_dialog[] =
 	{ eof_leading_silence_edit_proc, 16,  200, 74, 20,  2,   23,  0,    0,            10,  0,   eof_etext,       "1234567890", NULL },
 	{ d_agup_text_proc,       100,  200, 74, 20,  2,   23,  0,    0,           10,  0,   eof_etext2,       NULL, NULL },
 	{ d_agup_check_proc,      16,  226, 180, 16,  2,   23,  0,    D_SELECTED, 1,   0,   "Adjust Notes/Beats",    NULL, NULL },
-	{ d_agup_check_proc,      16,  246, 174, 16,  2,   23,  0,    0, 1,   0,   "Add RS COUNT measure",    NULL, NULL },
+	{ d_agup_check_proc,      16,  246, 174, 16,  2,   23,  0,    D_SELECTED, 1,   0,   "Add RS COUNT measure",    NULL, NULL },
 	{ d_agup_radio_proc,      16,  266, 160, 15,  2,   23,  0,    0,          1,   0,   "Stream copy (oggCat)",  NULL, NULL },
 	{ d_agup_radio_proc,      16,  286, 90,  15,  2,   23,  0,    0,          1,   0,   "Re-encode",             NULL, NULL },
 	{ d_agup_button_proc,     16,  312, 68,  28,  2,   23,  '\r', D_EXIT,     0,   0,   "OK",                    NULL, NULL },
@@ -2122,6 +2273,7 @@ int eof_menu_song_add_silence(void)
 	char fn[1024] = {0};
 	char mp3fn[1024] = {0};
 	static int creationmethod = 12;	//Stores the user's last selected leading silence creation method (default to re-encode, which is menu item 10 in eof_leading_silence_dialog[])
+	static int firstlaunch = 1;
 	int retval;
 	unsigned long old_eof_music_length = eof_music_length;	//Keep track of the current chart audio's length to compare with after silence was added
 
@@ -2131,6 +2283,12 @@ int eof_menu_song_add_silence(void)
 	{	//Do not allow this function to run when no audio is loaded or if there aren't at least two beats in the project
 		return 1;
 	}
+
+	if(firstlaunch && (eof_write_rs_files || eof_write_rs2_files))
+	{	//If this is the first time this dialog is launched during this EOF session, and Rocksmith export is enabled
+		eof_leading_silence_dialog[10].flags = D_SELECTED;	//Automatically enable the "Add RS COUNT measure" option
+	}
+	firstlaunch = 0;
 
 	eof_leading_silence_dialog[11].flags = 0;
 	eof_leading_silence_dialog[12].flags = 0;
@@ -2196,13 +2354,15 @@ int eof_menu_song_add_silence(void)
 		}
 		else
 		{	//Add silence
+			eof_prepare_undo(EOF_UNDO_TYPE_SILENCE);
+
 			if((eof_leading_silence_dialog[11].flags == D_SELECTED) && eof_supports_oggcat)
 			{	//User opted to use oggCat
 				creationmethod = 11;		//Remember this as the default next time
 				retval = eof_add_silence(eof_loaded_ogg_name, silence_length);
 			}
 			else
-			{	//User opted to re-encode, use follow up dialog to select bitrate
+			{	//User opted to re-encode
 				(void) replace_filename(mp3fn, eof_song_path, "original.mp3", sizeof(mp3fn));
 				if(exists(mp3fn))
 				{
@@ -2343,8 +2503,7 @@ DIALOG eof_audio_cues_dialog[] =
 	{ d_agup_slider_proc,	176,  88,  96,  16,   2,  23,    0,      0, 100,   0, NULL,                         (void *)eof_set_cue_volume,	eof_chart_volume_string },
 	{ d_agup_text_proc,		275,  88,  30,  16,   2,  23,    0,      0, 100,   0, eof_chart_volume_string,      NULL, NULL },
 	{ d_agup_text_proc,		16,  108,  64,   8,   2,  23,    0,      0,   0,   0, "Chart pan",    NULL, NULL },
-	{ eof_chart_audio_pan_button_proc,	162, 107,  12, 16, 2,  23,      0,     0,  0,   0, "C", NULL, NULL },
-	{ eof_audio_cues_slider_proc,	176, 108,  96,  16,   2,  23,    0,      0, 100,   0, NULL,                         (void *)eof_set_cue_pan, eof_chart_pan_string },
+	{ d_agup_slider_proc,	176, 108,  96,  16,   2,  23,    0,      0, 100,   0, NULL,                         (void *)eof_set_cue_pan, eof_chart_pan_string },
 	{ d_agup_text_proc,		275, 108,  30,  16,   2,  23,    0,      0, 100,   0, eof_chart_pan_string, NULL, NULL },
 	{ d_agup_text_proc,		16,	 128,  64,   8,   2,  23,    0,      0,   0,   0, "Clap volume",                NULL, NULL },
 	{ d_agup_slider_proc,	176, 128,  96,  16,   2,  23,    0,      0, 100,   0, NULL,                         (void *)eof_set_cue_volume,	eof_clap_volume_string },
@@ -2362,8 +2521,7 @@ DIALOG eof_audio_cues_dialog[] =
 	{ d_agup_slider_proc,	176, 208,  96,  16,   2,  23,    0,      0, 100,   0, NULL,                         (void *)eof_set_cue_volume,	eof_midi_tone_volume_string },
 	{ d_agup_text_proc,		275, 208,  30,  16,   2,  23,    0,      0, 100,   0, eof_midi_tone_volume_string, NULL, NULL },
 	{ d_agup_text_proc,		16,  228,  64,   8,   2,  23,    0,      0,   0,   0, "MIDI Tone pan",    NULL, NULL },
-	{ eof_midi_audio_pan_button_proc,	162, 227,  12, 16, 2,  23,      0,     0,  0,   0, "C", NULL, NULL },
-	{ eof_audio_cues_slider_proc,	176, 228,  96,  16,   2,  23,    0,      0, 100,   0, NULL,                         (void *)eof_set_cue_pan, eof_midi_tone_pan_string },
+	{ d_agup_slider_proc,	176, 228,  96,  16,   2,  23,    0,      0, 100,   0, NULL,                         (void *)eof_set_cue_pan, eof_midi_tone_pan_string },
 	{ d_agup_text_proc,		275, 228,  30,  16,   2,  23,    0,      0, 100,   0, eof_midi_tone_pan_string, NULL, NULL },
 	{ d_agup_text_proc,		16,  248,  64,   8,   2,  23,    0,      0,   0,   0, "Vocal Percussion sound:",    NULL, NULL },
 	{ d_agup_radio_proc,	16,  268,  68,  15,   2,  23,    0,      0,   0,   0, "Cowbell",                    NULL, NULL },
@@ -2404,38 +2562,12 @@ int eof_set_cue_volume(void *dp3, int d2)
 
 	(void) snprintf((char *)dp3, EOF_CUE_VOLUME_STRING_LEN - 1, "%3d%%", d2);	//Rewrite the specified volume slider string
 	(void) object_message(&eof_audio_cues_dialog[3], MSG_DRAW, 0);			//Have Allegro redraw the volume slider strings
-	(void) object_message(&eof_audio_cues_dialog[10], MSG_DRAW, 0);
-	(void) object_message(&eof_audio_cues_dialog[13], MSG_DRAW, 0);
-	(void) object_message(&eof_audio_cues_dialog[16], MSG_DRAW, 0);
-	(void) object_message(&eof_audio_cues_dialog[19], MSG_DRAW, 0);
-	(void) object_message(&eof_audio_cues_dialog[22], MSG_DRAW, 0);
+	(void) object_message(&eof_audio_cues_dialog[9], MSG_DRAW, 0);
+	(void) object_message(&eof_audio_cues_dialog[12], MSG_DRAW, 0);
+	(void) object_message(&eof_audio_cues_dialog[15], MSG_DRAW, 0);
+	(void) object_message(&eof_audio_cues_dialog[18], MSG_DRAW, 0);
+	(void) object_message(&eof_audio_cues_dialog[21], MSG_DRAW, 0);
 	return 0;
-}
-
-int eof_audio_cues_slider_proc(int msg, DIALOG *d, int c)
-{
-	int recenter = 0;
-
-	if((msg == MSG_CLICK) && KEY_EITHER_ALT)
-	{	//If ALT is held while clicking on the slider
-		recenter = 1;
-	}
-	if((msg == MSG_CHAR) && (tolower(c & 0xFF) == 'c'))
-	{	//If a key was pressed, and the ASCII (lower) half of the input is the letter C in either letter case
-		recenter = 1;
-	}
-
-	if(recenter)
-	{	//If input to re-center the pan slider was processed
-		d->d2 = 50;	//Set the slider to the center position
-		(void) snprintf((char *)d->dp3, EOF_CUE_VOLUME_STRING_LEN - 1, "C    ");	//Rewrite the specified volume slider string
-		(void) object_message(d, MSG_DRAW, 0);						//Redraw the slider
-		(void) object_message(&eof_audio_cues_dialog[7], MSG_DRAW, 0);	//Redraw all pan slider strings
-		(void) object_message(&eof_audio_cues_dialog[26], MSG_DRAW, 0);
-		return D_O_K;
-	}
-
-	return d_agup_slider_proc(msg, d, c);
 }
 
 int eof_set_cue_pan(void *dp3, int d2)
@@ -2459,41 +2591,9 @@ int eof_set_cue_pan(void *dp3, int d2)
 	{	//Panning to right of center
 		(void) snprintf((char *)dp3, EOF_CUE_VOLUME_STRING_LEN - 1, "R+%2d", d2 - 50);
 	}
-	(void) object_message(&eof_audio_cues_dialog[7], MSG_DRAW, 0);	//Have Allegro redraw the pan slider strings
-	(void) object_message(&eof_audio_cues_dialog[26], MSG_DRAW, 0);
+	(void) object_message(&eof_audio_cues_dialog[6], MSG_DRAW, 0);	//Have Allegro redraw the pan slider strings
+	(void) object_message(&eof_audio_cues_dialog[24], MSG_DRAW, 0);
 	return 0;
-}
-
-int eof_chart_audio_pan_button_proc(int msg, DIALOG *d, int c)
-{
-	if(msg == MSG_CLICK)
-	{
-		DIALOG *slider = &eof_audio_cues_dialog[6];	//The dialog object for the audio pan slider
-		slider->d2 = 50;	//Set the slider to the center position
-		(void) snprintf((char *)slider->dp3, EOF_CUE_VOLUME_STRING_LEN - 1, "C    ");	//Rewrite the specified volume slider string
-		(void) object_message(slider, MSG_DRAW, 0);	//Redraw the slider
-		(void) object_message(&eof_audio_cues_dialog[7], MSG_DRAW, 0);	//Redraw audio pan slider string
-
-		d->flags &= ~(D_GOTFOCUS | D_GOTMOUSE);	//Remove these statuses so the center button doesn't have its text label highlighted
-		d->flags |= D_SELECTED;					//Toggle the button on so it is immediately toggled off when d_agup_button_proc() is called below
-	}
-	return d_agup_button_proc(msg, d, c);
-}
-
-int eof_midi_audio_pan_button_proc(int msg, DIALOG *d, int c)
-{
-	if(msg == MSG_CLICK)
-	{
-		DIALOG *slider = &eof_audio_cues_dialog[25];	//The dialog object for the midi pan slider
-		slider->d2 = 50;	//Set the slider to the center position
-		(void) snprintf((char *)slider->dp3, EOF_CUE_VOLUME_STRING_LEN - 1, "C    ");	//Rewrite the specified volume slider string
-		(void) object_message(slider, MSG_DRAW, 0);	//Redraw the slider
-		(void) object_message(&eof_audio_cues_dialog[26], MSG_DRAW, 0);	//Redraw midi pan slider string
-
-		d->flags &= ~(D_GOTFOCUS | D_GOTMOUSE);	//Remove these statuses so the center button doesn't have its text label highlighted
-		d->flags |= D_SELECTED;					//Toggle the button on so it is immediately toggled off when d_agup_button_proc() is called below
-	}
-	return d_agup_button_proc(msg, d, c);
 }
 
 int eof_menu_audio_cues(void)
@@ -2506,23 +2606,23 @@ int eof_menu_audio_cues(void)
 	eof_color_dialog(eof_audio_cues_dialog, gui_fg_color, gui_bg_color);
 	eof_conditionally_center_dialog(eof_audio_cues_dialog);
 	eof_audio_cues_dialog[2].d2 = eof_chart_volume;
-	eof_audio_cues_dialog[6].d2 = eof_chart_pan;
-	eof_audio_cues_dialog[9].d2 = eof_clap_volume;
-	eof_audio_cues_dialog[12].d2 = eof_tick_volume;
-	eof_audio_cues_dialog[15].d2 = eof_tone_volume;
-	eof_audio_cues_dialog[18].d2 = eof_percussion_volume;
-	eof_audio_cues_dialog[21].d2 = eof_midi_tone_volume;
-	eof_audio_cues_dialog[25].d2 = eof_midi_pan;
+	eof_audio_cues_dialog[5].d2 = eof_chart_pan;
+	eof_audio_cues_dialog[8].d2 = eof_clap_volume;
+	eof_audio_cues_dialog[11].d2 = eof_tick_volume;
+	eof_audio_cues_dialog[14].d2 = eof_tone_volume;
+	eof_audio_cues_dialog[17].d2 = eof_percussion_volume;
+	eof_audio_cues_dialog[20].d2 = eof_midi_tone_volume;
+	eof_audio_cues_dialog[23].d2 = eof_midi_pan;
 
-	for(x = 28; x <= 47; x++)
+	for(x = 26; x <= 45; x++)
 	{	//Deselect all vocal percussion radio buttons
 		eof_audio_cues_dialog[x].flags = 0;
 	}
 	eof_audio_cues_dialog[eof_selected_percussion_cue].flags = D_SELECTED;	//Activate the radio button for the current vocal percussion cue
 
-	eof_audio_cues_dialog[48].flags = eof_clap_for_mutes ? D_SELECTED : 0;	//Update the "String mutes trigger clap" option
-	eof_audio_cues_dialog[49].flags = eof_clap_for_ghosts ? D_SELECTED : 0;	//Update the "Ghost notes trigger clap" option
-	eof_audio_cues_dialog[50].flags = eof_multi_pitch_metronome ? D_SELECTED : 0;	//Update the "Use multi-pitch metronome" option
+	eof_audio_cues_dialog[46].flags = eof_clap_for_mutes ? D_SELECTED : 0;	//Update the "String mutes trigger clap" option
+	eof_audio_cues_dialog[47].flags = eof_clap_for_ghosts ? D_SELECTED : 0;	//Update the "Ghost notes trigger clap" option
+	eof_audio_cues_dialog[48].flags = eof_multi_pitch_metronome ? D_SELECTED : 0;	//Update the "Use multi-pitch metronome" option
 
 	//Rebuild the volume/pan slider strings, as they are not guaranteed to be all 100% on launch of EOF since EOF stores the user's last-configured volumes in the config file
 	(void) eof_set_cue_volume(eof_chart_volume_string, eof_chart_volume);
@@ -2534,22 +2634,22 @@ int eof_menu_audio_cues(void)
 	(void) eof_set_cue_volume(eof_midi_tone_volume_string, eof_midi_tone_volume);
 	(void) eof_set_cue_pan(eof_midi_tone_pan_string, eof_midi_pan);
 
-	if(eof_popup_dialog(eof_audio_cues_dialog, 0) == 51)			//User clicked OK
+	if(eof_popup_dialog(eof_audio_cues_dialog, 0) == 49)			//User clicked OK
 	{
 		eof_chart_volume = eof_audio_cues_dialog[2].d2;				//Store the volume set by the chart volume slider
 		eof_chart_volume_multiplier = sqrt(eof_chart_volume/100.0);	//Store this math so it only needs to be performed once
-		eof_chart_pan = eof_audio_cues_dialog[6].d2;				//Store the pan value set by the chart pan slider
-		eof_clap_volume = eof_audio_cues_dialog[9].d2;				//Store the volume set by the clap cue volume slider
-		eof_tick_volume = eof_audio_cues_dialog[12].d2;				//Store the volume set by the tick cue volume slider
-		eof_tone_volume = eof_audio_cues_dialog[15].d2;			//Store the volume set by the tone cue volume slider
-		eof_percussion_volume = eof_audio_cues_dialog[18].d2;		//Store the volume set by the vocal percussion cue volume slider
-		eof_midi_tone_volume = eof_audio_cues_dialog[21].d2;		//Store the volume set by the MIDI tone volume slider
-		eof_midi_pan = eof_audio_cues_dialog[25].d2;				//Store the pan value set by the MIDI tone pan slider
-		eof_clap_for_mutes = eof_audio_cues_dialog[48].flags == D_SELECTED ? 1 : 0;	//Store the "String mutes trigger clap" option
-		eof_clap_for_ghosts = eof_audio_cues_dialog[49].flags == D_SELECTED ? 1 : 0;	//Store the "Ghost notes trigger clap" option
-		eof_multi_pitch_metronome = eof_audio_cues_dialog[50].flags == D_SELECTED ? 1 : 0;	//Store the "Use multi-pitch metronome" option
+		eof_chart_pan = eof_audio_cues_dialog[5].d2;				//Store the pan value set by the chart pan slider
+		eof_clap_volume = eof_audio_cues_dialog[8].d2;				//Store the volume set by the clap cue volume slider
+		eof_tick_volume = eof_audio_cues_dialog[11].d2;				//Store the volume set by the tick cue volume slider
+		eof_tone_volume = eof_audio_cues_dialog[14].d2;			//Store the volume set by the tone cue volume slider
+		eof_percussion_volume = eof_audio_cues_dialog[17].d2;		//Store the volume set by the vocal percussion cue volume slider
+		eof_midi_tone_volume = eof_audio_cues_dialog[20].d2;		//Store the volume set by the MIDI tone volume slider
+		eof_midi_pan = eof_audio_cues_dialog[23].d2;				//Store the pan value set by the MIDI tone pan slider
+		eof_clap_for_mutes = eof_audio_cues_dialog[46].flags == D_SELECTED ? 1 : 0;	//Store the "String mutes trigger clap" option
+		eof_clap_for_ghosts = eof_audio_cues_dialog[47].flags == D_SELECTED ? 1 : 0;	//Store the "Ghost notes trigger clap" option
+		eof_multi_pitch_metronome = eof_audio_cues_dialog[48].flags == D_SELECTED ? 1 : 0;	//Store the "Use multi-pitch metronome" option
 
-		for(x = 28; x <= 47; x++)
+		for(x = 26; x <= 45; x++)
 		{	//Search for the selected vocal percussion cue
 			if(eof_audio_cues_dialog[x].flags == D_SELECTED)
 			{
@@ -2811,8 +2911,10 @@ int eof_menu_song_spectrogram_settings(void)
 		eof_half_spectrogram_windowsize = (double)eof_spectrogram_windowsize / 2.0;	//Cache this value so it isn't calculated for every rendered column of the spectrogram
 
 		//Recreate the spectrogram if we changed the window size
-		if((eof_spectrogram_windowsize != prev_windowsize) && (eof_spectrogram != NULL))
+		if((eof_spectrogram_windowsize != prev_windowsize) && (eof_spectrogram != NULL) && !eof_display_spectrogram_experimental)
 		{
+			/* The classic Configure dialog must not replace an active experimental
+			 * Hann/overlap analysis with legacy FFT data behind its back. */
 			eof_destroy_spectrogram(eof_spectrogram);
 			eof_spectrogram = eof_create_spectrogram(eof_loaded_ogg_name);
 		}
@@ -2924,71 +3026,71 @@ int eof_menu_song_legacy_view(void)
 
 void eof_set_percussion_cue(int cue_number)
 {
-	if((cue_number < 27) || (cue_number > 46))
+	if((cue_number < 17) || (cue_number > 36))
 	{	//If the cue number is out of bounds
-		cue_number = 27;	//Reset to cowbell
+		cue_number = 17;	//Reset to cowbell
 	}
 
 	switch(cue_number)
 	{
-		case 27:
+		case 17:
 			eof_sound_chosen_percussion = eof_sound_cowbell;
 		break;
-		case 28:
+		case 18:
 			eof_sound_chosen_percussion = eof_sound_triangle1;
 		break;
-		case 29:
+		case 19:
 			eof_sound_chosen_percussion = eof_sound_triangle2;
 		break;
-		case 30:
+		case 20:
 			eof_sound_chosen_percussion = eof_sound_tambourine1;
 		break;
-		case 31:
+		case 21:
 			eof_sound_chosen_percussion = eof_sound_tambourine2;
 		break;
-		case 32:
+		case 22:
 			eof_sound_chosen_percussion = eof_sound_tambourine3;
 		break;
-		case 33:
+		case 23:
 			eof_sound_chosen_percussion = eof_sound_woodblock1;
 		break;
-		case 34:
+		case 24:
 			eof_sound_chosen_percussion = eof_sound_woodblock2;
 		break;
-		case 35:
+		case 25:
 			eof_sound_chosen_percussion = eof_sound_woodblock3;
 		break;
-		case 36:
+		case 26:
 			eof_sound_chosen_percussion = eof_sound_woodblock4;
 		break;
-		case 37:
+		case 27:
 			eof_sound_chosen_percussion = eof_sound_woodblock5;
 		break;
-		case 38:
+		case 28:
 			eof_sound_chosen_percussion = eof_sound_woodblock6;
 		break;
-		case 39:
+		case 29:
 			eof_sound_chosen_percussion = eof_sound_woodblock7;
 		break;
-		case 40:
+		case 30:
 			eof_sound_chosen_percussion = eof_sound_woodblock8;
 		break;
-		case 41:
+		case 31:
 			eof_sound_chosen_percussion = eof_sound_woodblock9;
 		break;
-		case 42:
+		case 32:
 			eof_sound_chosen_percussion = eof_sound_woodblock10;
 		break;
-		case 43:
+		case 33:
 			eof_sound_chosen_percussion = eof_sound_clap1;
 		break;
-		case 44:
+		case 34:
 			eof_sound_chosen_percussion = eof_sound_clap2;
 		break;
-		case 45:
+		case 35:
 			eof_sound_chosen_percussion = eof_sound_clap3;
 		break;
-		case 46:
+		case 36:
 			eof_sound_chosen_percussion = eof_sound_clap4;
 		break;
 
@@ -4629,8 +4731,8 @@ int eof_check_fret_hand_positions_option(char report, char *undo_made)
 
 	for(ctr = 1; ctr < eof_song->tracks; ctr++)
 	{	//For each track in the project
-		if(!eof_track_is_pro_guitar_track(eof_song, ctr))
-			continue;	//If this is not a pro guitar/bass track, skip it
+		if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
+			continue;	//DTX frets are MIDI percussion note numbers, not guitar fret-hand positions
 
 		tracknum = eof_song->track[ctr]->tracknum;
 		tp = eof_song->pro_guitar_track[tracknum];

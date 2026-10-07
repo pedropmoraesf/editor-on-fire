@@ -138,6 +138,8 @@ int eof_menu_track_selected_11(void);
 int eof_menu_track_selected_12(void);
 int eof_menu_track_selected_13(void);
 int eof_menu_track_selected_14(void);
+int eof_menu_track_selected_15(void);
+int eof_menu_track_selected_16(void);
 int eof_menu_track_selected_track_number(unsigned long tracknum, int updatetitle);
 	//Changes to the specified track number
 	//If updatetitle is nonzero, EOF's program window title is set (it should not be updated when used to render the second piano roll)
@@ -147,6 +149,8 @@ int eof_menu_song_waveform_settings(void);
 int eof_menu_song_waveform(void);	//Toggle the display of the waveform on/off, generating the waveform data if necessary
 int eof_menu_song_spectrogram_settings(void);
 int eof_menu_song_spectrogram(void);	//Toggle the display of the spectrogram on/off, generating the spectrogram data if necessary
+int eof_menu_song_spectrogram_experimental(void);	//Toggle the experimental music-oriented spectrogram
+int eof_menu_song_spectrogram_auto_sync(void);	//Experimental onset-based timing synchronization for existing notes
 int eof_menu_song_add_silence(void);
 
 int eof_leading_silence_radio_proc(int msg, DIALOG *d, int c);
@@ -280,12 +284,5 @@ int eof_menu_song_add_floating_text_event(void);
 	//Calls eof_menu_song_add_floating_text_event_at_timestamp() specifying the seek position as the timestamp
 int eof_menu_song_add_floating_text_event_at_mouse(void);
 	//Calls eof_menu_song_add_floating_text_event_at_timestamp() specifying the pen note (mouse) position as the timestamp
-
-int eof_audio_cues_slider_proc(int msg, DIALOG *d, int c);
-	//Behaves as the normal d_agup_slider_proc function, except if ASCII input for C is detected, it re-centers the target slider object's value and redraws the pan value strings in eof_audio_cues_dialog()
-int eof_chart_audio_pan_button_proc(int msg, DIALOG *d, int c);
-	//Centers the audio left/right pan audio cue slider setting when activated
-int eof_midi_audio_pan_button_proc(int msg, DIALOG *d, int c);
-	//Centers the MIDI left/right pan audio cue slider setting when activated
 
 #endif

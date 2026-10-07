@@ -12,7 +12,7 @@
 #include "memwatch.h"
 #endif
 
-char *eof_difficulty_ini_tags[EOF_TRACKS_MAX + 1] = {"", "diff_guitar", "diff_bass", "diff_guitar_coop", "diff_rhythm", "diff_drums", "diff_vocals", "diff_keys", "diff_bass_real", "diff_guitar_real", "diff_dance", "diff_bass_real_22", "diff_guitar_real_22", "diff_drums_real_ps", "diff_keys_real"};
+char *eof_difficulty_ini_tags[EOF_TRACKS_MAX + 1] = {"", "diff_guitar", "diff_bass", "diff_guitar_coop", "diff_rhythm", "diff_drums", "diff_vocals", "diff_keys", "diff_bass_real", "diff_guitar_real", "diff_dance", "diff_bass_real_22", "diff_guitar_real_22", "diff_drums_real_ps", "diff_keys_real", "", ""};
 int eof_rb_tier_values[7] = {1, 150, 208, 267, 325, 384, 442};	//Rock Band's tier values for difficulties 0 through 6, for use in creating DTA files
 
 int eof_save_ini(EOF_SONG * sp, char * fn, char silent)

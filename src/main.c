@@ -201,7 +201,7 @@ unsigned    eof_min_note_distance = 3;			//Specifies the user-configured minimum
 unsigned    eof_min_note_distance_intervals = 0;	//If 0, the minimum distance between notes is observed to be in ms.  If 1, it's observed to be /# measure.  If 2, it's observed to be 1/# beat.
 int         eof_render_bass_drum_in_lane = 0;	//If nonzero, the 3D rendering will draw bass drum gems in a lane instead of as a bar spanning all lanes
 int         eof_click_changes_dialog_focus = 1;	//If nonzero, eof_verified_proc will not change dialog focus on mouse-over, it requires an explicit mouse click
-int         eof_stop_playback_leave_focus = 1;	//If nonzero, EOF stops playback when it is not in the foreground
+int         eof_stop_playback_leave_focus = 0;	//Legacy preference retained for config compatibility; background playback is always allowed
 int         eof_inverted_chords_slash = 0;
 int         eof_render_3d_rs_chords = 0;		//If nonzero, the 3D rendering will draw a rectangle to represent chords that will export to XML as repeats (Rocksmith), and 3D chord tails will not be rendered
 int         eof_render_2d_rs_piano_roll = 0;	//If nonzero, the piano roll will display with some visual differences (thicker, colored measure markers, color-coded string lines)
@@ -214,7 +214,6 @@ int         eof_display_seek_pos_in_seconds = 0;	//If nonzero, the seek position
 int         eof_note_tails_clickable = 0;		//If nonzero, when the mouse hovers over a note tail instead of just the note/lyric head, that note becomes the hover note
 int         eof_lyric_tails_clickable = 0;		//If nonzero, when the mouse hovers over a lyric tail instead of just the note/lyric head, that lyric becomes the hover note
 int         eof_ctrl_tab_skip_empty_tracks = 0;		//If nonzero, CTRL+TAB and SHIFT+CTRL+TAB shortcuts skip empty tracks
-int         eof_dont_check_for_updates = 0;	//If nonzero, EOF will skip checking for updates upon launch
 int         eof_auto_complete_fingering = 1;	//If nonzero, offer to apply specified chord fingering to matching notes in the track
 int         eof_dont_auto_name_double_stops = 0;	//If nonzero, the chord detection logic will not name chords that have only two pitches (unique or otherwise)
 int         eof_section_auto_adjust = 1;		//If nonzero, section and FHP positions are updated when all their contained notes are simultaneously moved
@@ -361,7 +360,6 @@ unsigned long eof_seek_selection_start = 0, eof_seek_selection_end = 0;	//Used t
 int         eof_shift_released = 1;	//Tracks the press/release of the SHIFT keys for the Feedback input mode seek selection system
 int         eof_shift_used = 0;	//Tracks whether the SHIFT key was used for a keyboard shortcut while SHIFT was held
 int         eof_tab_released = 1;	//Tracks the press/release of the tab key to prevent the Allegro bug of its status getting stuck from repeatedly triggering keyboard functions
-int         eof_emergency_stop = 0;	//Set to nonzero by eof_switch_out_callback() so that playback can be stopped OUTSIDE of the callback, in EOF's main loop so that a crash with time stretched playback can be avoided
 unsigned slide_in_from_warned = 0;	//Tracks whether the user has been warned yet this program session that slide in from above/below notes were encountered
 
 char eof_default_ini_setting[EOF_MAX_INI_SETTINGS][EOF_INI_LENGTH] = {{0}};	//Stores the entries of the [default_ini_settings] section in the config file
@@ -917,16 +915,16 @@ void eof_switch_out_callback(void)
 {
 	eof_log("eof_switch_out_callback() entered", 3);
 
-	if(eof_stop_playback_leave_focus)
-	{	//If the user preference is to stop playback when EOF leaves the foreground
-		eof_emergency_stop = 1;	//Trigger EOF to call eof_emergency_stop_music()
-	}
+	/* Playback intentionally continues while EOF is unfocused or minimized.
+	 * SWITCH_BACKGROUND keeps Allegro/audio active; do not stop OGG, MIDI or
+	 * sample-synchronous cue playback here. */
 	eof_clear_input();
 
 	#ifndef ALLEGRO_MACOSX
 		eof_has_focus = 0;
 	#endif
 
+	eof_log("\tEOF background playback remains active", 3);
 	eof_log("\teof_switch_out_callback() completed", 3);
 }
 
@@ -2454,15 +2452,23 @@ void eof_fix_spectrogram(void)
 	if(eof_music_paused && eof_spectrogram)
 	{
 		eof_destroy_spectrogram(eof_spectrogram);
-		eof_spectrogram = eof_create_spectrogram(eof_loaded_ogg_name);	//Generate 1ms spectrogram data from the current audio file
+		if(eof_display_spectrogram_experimental)
+			eof_spectrogram = eof_create_spectrogram_experimental(eof_loaded_ogg_name);
+		else
+			eof_spectrogram = eof_create_spectrogram(eof_loaded_ogg_name);
+
 		if(eof_spectrogram)
 		{
-			eof_spectrogram_menu[0].flags = D_SELECTED;	//Check the Show item in the Song>Waveform graph menu
+			if(eof_display_spectrogram_experimental)
+				eof_spectrogram_menu[0].flags = 0;
+			else
+				eof_spectrogram_menu[0].flags = D_SELECTED;
 		}
 		else
 		{
 			eof_display_spectrogram = 0;
-			eof_spectrogram_menu[0].flags = 0;	//Clear the Show item in the Song>Waveform graph menu
+			eof_display_spectrogram_experimental = 0;
+			eof_spectrogram_menu[0].flags = 0;
 		}
 	}
 }
@@ -3081,13 +3087,6 @@ void eof_logic(void)
 
 	eof_read_keyboard_input(1);	//Drop ASCII values for number pad key presses
 	eof_read_global_keys();
-
-	if(eof_emergency_stop)
-	{	//If the switch out callback function was triggered, stop playback immediately
-		eof_log("Emergency playback stop detected", 2);
-		eof_emergency_stop_music();
-		eof_emergency_stop = 0;
-	}
 
 	/* see if we need to activate the menu */
 	#ifndef ALLEGRO_LEGACY
@@ -4143,20 +4142,18 @@ void eof_render(void)
 	static char out_of_focus = 0;
 //	eof_log("eof_render() entered.", 3);
 
-	/* don't draw if window is out of focus */
+	/* Never render while the window is out of focus/minimized.  Audio playback
+	 * and all sample-synchronous cues continue independently in the audio
+	 * callback, so drawing in the background only wastes CPU and can make
+	 * minimized playback less stable on some video drivers. */
 	if(!eof_has_focus)
-	{	//If EOF is not in the foreground
+	{
 		if(!out_of_focus)
-			eof_log("\tEOF is in background, ending render.", 3);	//If this is the first frame that EOF has been out of the foreground
-
-		if(eof_music_paused && !eof_music_catalog_playback)
-		{	//If neither the chart nor the catalog are playing (depending on user preference, playback is allowed when EOF is not in the foreground)
-			return;
-		}
-		out_of_focus = 1;	//Don't repeatedly log being out of focus every consecutive frame this is the case
+			eof_log("\tEOF is in background; rendering suspended while playback remains active.", 3);
+		out_of_focus = 1;
+		return;
 	}
-	else
-		out_of_focus = 0;
+	out_of_focus = 0;
 
 	if(eof_song_loaded)
 	{	//If a project is loaded
@@ -4906,10 +4903,10 @@ int eof_initialize(int argc, char * argv[])
 	eof_filter_gp_files = ncdfs_filter_list_create();
 	if(!eof_filter_gp_files)
 	{
-		allegro_message("Could not create file list filter (*.gp5;gp4;gp3;xml)!");
+		allegro_message("Could not create file list filter (*.gp;gpx;gp5;gp4;gp3;xml;tg)!");
 		return 0;
 	}
-	ncdfs_filter_list_add(eof_filter_gp_files, "gp5;gp4;gp3;xml", "Guitar Pro (*.gp?), Go PlayAlong (*.xml)", 1);
+	ncdfs_filter_list_add(eof_filter_gp_files, "gp;gpx;gp5;gp4;gp3;xml;tg", "Guitar Pro (*.gp, *.gpx, *.gp3-*.gp5), TuxGuitar (*.tg), Go PlayAlong (*.xml)", 1);
 
 	eof_filter_gp_lyric_text_files = ncdfs_filter_list_create();
 	if(!eof_filter_gp_lyric_text_files)
@@ -5396,7 +5393,7 @@ int eof_initialize(int argc, char * argv[])
 					}
 				}
 			}
-			else if(!ustricmp(get_extension(argv[i]), "gp3") || !ustricmp(get_extension(argv[i]), "gp4") || !ustricmp(get_extension(argv[i]), "gp5"))
+			else if(!ustricmp(get_extension(argv[i]), "gp") || !ustricmp(get_extension(argv[i]), "gpx") || !ustricmp(get_extension(argv[i]), "gp3") || !ustricmp(get_extension(argv[i]), "gp4") || !ustricmp(get_extension(argv[i]), "gp5"))
 			{	//Import a Guitar Pro file via command line
 				if(!eof_command_line_gp_import(argv[i]))
 				{	//If a new project was created and the Guitar Pro file was imported successfully
@@ -5680,16 +5677,18 @@ void eof_all_midi_notes_off(void)
 
 	if(midi_driver)
 	{
-		unsigned char ALL_NOTES_OFF[3] = {0xB1,123,0};	//Data sequence for a Control Change, controller 123, value 0 (All notes off)
+		unsigned char ALL_NOTES_OFF[3] = {0xB0,123,0};	//Control Change 123 (All Notes Off)
+		unsigned channel;
 
 //		eof_log("\tMIDI emergency off", 3);
 
-		midi_driver->raw_midi(ALL_NOTES_OFF[0]);
-		midi_driver->raw_midi(ALL_NOTES_OFF[1]);
-		midi_driver->raw_midi(ALL_NOTES_OFF[2]);
-
-		//Update the note statuses in eof_midi_channel_status[]
-		eof_midi_channel_status[0].on = eof_midi_channel_status[1].on = eof_midi_channel_status[2].on = eof_midi_channel_status[3].on = eof_midi_channel_status[4].on = eof_midi_channel_status[5].on = 0;
+		/* Clear every MIDI channel, including GM percussion channel 10. */
+		for(channel = 0; channel < 16U; channel++)
+		{
+			ALL_NOTES_OFF[0] = (unsigned char)(0xB0 | channel);
+			midi_out(ALL_NOTES_OFF, 3);
+			eof_midi_channel_status[channel].on = 0;
+		}
 	}
 }
 
@@ -5741,6 +5740,7 @@ void eof_init_after_load(char initaftersavestate)
 		eof_selected_catalog_entry = 0;
 		eof_display_waveform = 0;
 		eof_display_spectrogram = 0;
+		eof_display_spectrogram_experimental = 0;
 		eof_display_catalog = 0;		//Hide the fret catalog by default
 		eof_select_beat(0);
 		eof_undo_reset();
@@ -6166,6 +6166,8 @@ void eof_log_cwd(void)
 /* use to prevent 100% CPU usage */
 static void eof_idle_logic(void)
 {
+	int background_playback = (!eof_has_focus && (!eof_music_paused || eof_music_catalog_playback));
+
 	if(eof_new_idle_system)
 	{	//If the newer idle system was enabled via command line
 		/* rest to save CPU */
@@ -6180,8 +6182,13 @@ static void eof_idle_logic(void)
 				}
 			#endif
 		}
-
-		/* make program "sleep" until it is back in focus */
+		else if(background_playback)
+		{
+			/* Keep the main/player loop responsive while playback continues in
+			 * the background.  A 500ms sleep caused MIDI timers and other
+			 * non-callback playback work to advance in visible chunks. */
+			Idle(1);
+		}
 		else
 		{
 			Idle(500);
@@ -6190,13 +6197,14 @@ static void eof_idle_logic(void)
 	}
 	else
 	{	//If the normal idle system is in effect
-		/* rest to save CPU */
 		if(eof_has_focus)
 		{
 			rest(eof_cpu_saver * 5);
 		}
-
-		/* make program "sleep" until it is back in focus */
+		else if(background_playback)
+		{
+			rest(1);
+		}
 		else
 		{
 			rest(500);
@@ -6221,10 +6229,6 @@ int main(int argc, char * argv[])
 		if(!eof_initialize_windows())
 		{
 			eof_quit = init_failed = 1;
-		}
-		if(!eof_dont_check_for_updates)
-		{	//If checking for updates wasn't suppressed in preferences
-			eof_check_update();
 		}
 	#else
 		if(!eof_initialize(argc, argv))

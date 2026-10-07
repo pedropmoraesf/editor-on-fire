@@ -3650,8 +3650,8 @@ void eof_song_fix_fingerings(EOF_SONG *sp, char *undo_made)
 
 	for(ctr = 1; ctr < sp->tracks; ctr++)
 	{	//For each track (skipping the NULL global track 0)
-		if(eof_track_is_pro_guitar_track(sp, ctr))
-		{	//If this is a pro guitar track
+		if((ctr != EOF_TRACK_DRUM_DTX) && eof_track_is_pro_guitar_track(sp, ctr))
+		{	//If this is a standard pro guitar track (the DTX source track is intentionally excluded)
 			restore_tech_view = eof_menu_track_get_tech_view_state(sp, ctr);
 			eof_menu_track_set_tech_view_state(sp, ctr, 0); //Disable tech view if applicable
 			eof_pro_guitar_track_fix_fingerings(sp->pro_guitar_track[sp->track[ctr]->tracknum], undo_made, 1);	//Correct and complete note fingering chart-wide where possible, performing an undo state before making changes

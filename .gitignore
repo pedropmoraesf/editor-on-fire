@@ -44,3 +44,6 @@ bin/eof.cfg
 bin/eof_log.txt
 bin/FFTW.wisdom
 /bin/os_clipboard.txt
+
+# Local EOF temporary projects and audio
+bin/temp/

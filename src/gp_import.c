@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "gp_import.h"
+#include "gpif_import.h"
 
 #ifdef USEMEMWATCH
 #include "memwatch.h"
@@ -1724,7 +1725,7 @@ void eof_guitar_pro_import_release_memory(struct eof_guitar_pro_import_vars *var
 struct eof_guitar_pro_struct *eof_load_gp(const char * fn, char *undo_made)
 {
 	#define EOF_GP_IMPORT_BUFFER_SIZE 256
-	char buffer[EOF_GP_IMPORT_BUFFER_SIZE + 1] = {0}, *buffer2, buffer3[EOF_GP_IMPORT_BUFFER_SIZE + 1] = {0}, buffer4[EOF_GP_IMPORT_BUFFER_SIZE + 1] = {0}, buffer5[EOF_GP_IMPORT_BUFFER_SIZE + 1] = {0}, byte, bytemask, *ptr, patches[64] = {0}, year[5];
+	char buffer[EOF_GP_IMPORT_BUFFER_SIZE + 1] = {0}, *buffer2, buffer3[EOF_GP_IMPORT_BUFFER_SIZE + 1] = {0}, buffer4[EOF_GP_IMPORT_BUFFER_SIZE + 1] = {0}, byte, bytemask, *ptr, patches[64] = {0};
 	unsigned char usedstrings, definedstrings;
 	unsigned char usedtie;	//Tracks which strings in an imported note were tie notes
 	unsigned word = 0, fileversion;
@@ -1772,7 +1773,7 @@ struct eof_guitar_pro_struct *eof_load_gp(const char * fn, char *undo_made)
 		//During GPA import, timings can be configured so that beats start at a negative position (before the start of the audio) if the first sync point is not at measure 1
 		//This counter is an offset indicating how many beats of content are being omitted from the imported track, so source beat #N is imported to beat #(N-skipbeatsourcectr) in the project
 	char importnote = 0;	//A boolean variable tracking whether each note is at or after 0ms and will import
-	char hastitle = 0, hasartist = 0, hasalbum = 0, hasyear = 0;	//Tracks whether the Guitar Pro file has metadata that can be applied to the project
+	char hastitle = 0, hasartist = 0, hasalbum = 0;	//Tracks whether the Guitar Pro file has metadata that can be applied to the project
 	static struct eof_guitar_pro_import_vars vars;	//Store all of the memory and file pointers together to simplify freeing them.  A static struct has all members auto-initialized to 0/NULL
 	struct eof_guitar_pro_struct *retval;
 	unsigned long existing_time_signature_count;	//Used to determine whether the active project has any time signatures to potentially preserve, so as to prompt whether to overwrite them during import
@@ -1785,6 +1786,15 @@ struct eof_guitar_pro_struct *eof_load_gp(const char * fn, char *undo_made)
 	{
 		return NULL;
 	}
+
+	/* Guitar Pro 7/8 .gp files use a ZIP container with Content/score.gpif.
+	 * Route the modern extensions directly to the GPIF loader instead of
+	 * depending only on ZIP probing.  On Windows, UTF-8 filenames containing
+	 * accented characters can make narrow CRT fopen() probes fail even though
+	 * Allegro can open the file correctly.  eof_gpif_is_container() is kept as
+	 * a signature fallback for renamed GPIF files. */
+	if(!ustricmp(get_extension(fn), "gp") || !ustricmp(get_extension(fn), "gpx") || eof_gpif_is_container(fn))
+		return eof_load_gpif(fn, undo_made);
 	gpfile = fn;	//Unless fn is found to point to a Go PlayAlong XML file, fn is assumed to be the path to a Guitar Pro file
 
 
@@ -2117,7 +2127,7 @@ struct eof_guitar_pro_struct *eof_load_gp(const char * fn, char *undo_made)
 #endif
 
 
-//Read various information
+//Read past various ignored information
 	(void) eof_read_gp_string(vars.inf, NULL, buffer3, 1);	//Read title string
 	if(eof_check_string(buffer3) && !eof_check_string(eof_song->tags->title))
 		hastitle = 1;	//Track if the GP file defines the song title and the active project does not
@@ -2125,23 +2135,12 @@ struct eof_guitar_pro_struct *eof_load_gp(const char * fn, char *undo_made)
 	(void) eof_read_gp_string(vars.inf, NULL, buffer4, 1);	//Read artist string
 	if(eof_check_string(buffer4) && !eof_check_string(eof_song->tags->artist))
 		hasartist = 1;	//Track if the GP file defines the artist name and the active project does not
-	(void) eof_read_gp_string(vars.inf, NULL, buffer5, 1);	//Read album string
-	if(eof_check_string(buffer5) && !eof_check_string(eof_song->tags->album))
+	(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read album string
+	if(eof_check_string(buffer) && !eof_check_string(eof_song->tags->album))
 		hasalbum = 1;	//Track if the GP file defines the album name and the active project does not
-	if(fileversion >= 500)
-	{	//The words field only exists in version 5.x or higher versions of the format
-		(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read words string
-	}
-	(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read music string
-	(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read copyright string
-	if(eof_parse_four_digit_year(buffer, year) && !eof_check_string(eof_song->tags->year))
-	{	//If a four digit number was found in the copyright string and the active project does not define the year
-		hasyear = 1;
-	}
-
-	if(hastitle || hasartist || hasalbum || hasyear)
+	if(hastitle || hasartist || hasalbum)
 	{	//If the Guitar Pro file has metadata that isn't defined in the project, offer to use it
-		if(alert(NULL, "Load missing artist/title/album/year metadata from the Guitar Pro file?", NULL, "&Yes", "&No", 'y', 'n') == 1)
+		if(alert(NULL, "Load missing artist/title/album metadata from the Guitar Pro file?", NULL, "&Yes", "&No", 'y', 'n') == 1)
 		{	//If the user opts to import the metadata
 			if(hastitle)
 			{
@@ -2156,16 +2155,16 @@ struct eof_guitar_pro_struct *eof_load_gp(const char * fn, char *undo_made)
 			if(hasalbum)
 			{
 				eof_log("\tImporting album title metadata", 2);
-				ustrncpy(eof_song->tags->album, buffer5, sizeof(eof_song->tags->album) - 1);
-			}
-			if(hasyear)
-			{
-				eof_log("\tImporting year metadata", 2);
-				ustrncpy(eof_song->tags->year, year, sizeof(eof_song->tags->year) - 1);
+				ustrncpy(eof_song->tags->album, buffer, sizeof(eof_song->tags->album) - 1);
 			}
 		}
 	}
-
+	if(fileversion >= 500)
+	{	//The words field only exists in version 5.x or higher versions of the format
+		(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read words string
+	}
+	(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read music string
+	(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read copyright string
 	(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read tab string
 	(void) eof_read_gp_string(vars.inf, NULL, buffer, 1);	//Read instructions string
 	pack_ReadDWORDLE(vars.inf, &dword);			//Read the number of notice entries
@@ -4497,7 +4496,7 @@ struct eof_guitar_pro_struct *eof_load_gp(const char * fn, char *undo_made)
 					measurelength = beatlength / (double)den;	//Calculate this length in terms of measures (beat length divided by beat unit)
 					if((unsigned long)(measurelength * 100.0 + 0.5) < 25)
 					{	//If the note (rounded up to allow for floating point math error) is shorter than a quarter note
-						(void) snprintf(eof_log_string, sizeof(eof_log_string) - 1, "\t\t\tNote #%lu pos = %lums, len = %ldms, measure length = %f -> 1ms long", ctr2, vars.gp->track[ctr]->note[ctr2]->pos, vars.gp->track[ctr]->note[ctr2]->length, measurelength);
+						(void) snprintf(eof_log_string, sizeof(eof_log_string) - 1, "\t\t\tNote #%lu pos = %lums, len = %lums, measure length = %f -> 1ms long", ctr2, vars.gp->track[ctr]->note[ctr2]->pos, vars.gp->track[ctr]->note[ctr2]->length, measurelength);
 						eof_log(eof_log_string, 2);
 						vars.gp->track[ctr]->note[ctr2]->length = 1;
 					}
@@ -4797,7 +4796,7 @@ struct eof_guitar_pro_struct *eof_load_gp(const char * fn, char *undo_made)
 						eof_log("\tResnapping note tails", 1);
 						firstlogged = 1;
 					}
-					(void) snprintf(eof_log_string, sizeof(eof_log_string) - 1, "\t\tTrack #%lu, note #%lu (length %ld -> %lu)", ctr, ctr2, np->length, snappos - np->pos);
+					(void) snprintf(eof_log_string, sizeof(eof_log_string) - 1, "\t\tTrack #%lu, note #%lu (length %lu -> %lu)", ctr, ctr2, np->length, snappos - np->pos);
 					eof_log(eof_log_string, 2);
 #endif
 					if((snappos + 1 == np->pos + np->length) || (np->pos + np->length + 1 == snappos))

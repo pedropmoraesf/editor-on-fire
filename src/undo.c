@@ -75,6 +75,16 @@ int eof_undo_load_state(const char * fn)
 			return 0;	//Return failure
 		}
 	}
+	if(EOF_TRACK_DRUM_DTX >= sp->tracks)
+	{	//If this undo state predates the dedicated DTXMania drum track
+		if(eof_song_add_track(sp, &eof_default_tracks[EOF_TRACK_DRUM_DTX]) == 0)
+		{
+			allegro_message("Failed to perform undo");
+			(void) pack_fclose(rfp);
+			eof_destroy_song(sp);
+			return 0;
+		}
+	}
 	if(eof_song)
 	{
 		eof_undo_in_progress = 1;	//Signal to eof_destroy_song() that the waveform and spectrogram are not to be destroyed along with the active project structure

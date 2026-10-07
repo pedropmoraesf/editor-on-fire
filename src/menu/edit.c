@@ -226,6 +226,7 @@ MENU eof_edit_tones_menu[] =
 {
 	{"&Vocal Tones\tV", eof_menu_edit_vocal_tones, NULL, D_USER, NULL},
 	{"&MIDI Tones\tShift+T", eof_menu_edit_midi_tones, NULL, D_USER, NULL},
+	{"&Drum tones", eof_menu_edit_drum_tones, NULL, D_USER, NULL},
 	{NULL, NULL, NULL, 0, NULL}
 };
 
@@ -700,6 +701,12 @@ void eof_prepare_edit_menu(void)
 				eof_edit_tones_menu[1].flags = D_SELECTED;
 			}
 		}
+
+		/* DTX drum tones */
+		if(eof_selected_track != EOF_TRACK_DRUM_DTX)
+			eof_edit_tones_menu[2].flags = D_DISABLED;
+		else
+			eof_edit_tones_menu[2].flags = eof_mix_drum_tones_enabled ? D_SELECTED : 0;
 
 		/* Vocal tones */
 		if(!eof_mix_vocal_tones_enabled)
@@ -2872,6 +2879,14 @@ int eof_menu_edit_midi_tones(void)
 	{
 		eof_mix_midi_tones_enabled = 1;
 	}
+	return 1;
+}
+
+int eof_menu_edit_drum_tones(void)
+{
+	if(!eof_song || (eof_selected_track != EOF_TRACK_DRUM_DTX))
+		return 1;
+	eof_mix_drum_tones_enabled = eof_mix_drum_tones_enabled ? 0 : 1;
 	return 1;
 }
 

@@ -309,6 +309,8 @@ typedef struct
 #define EOF_TRACK_PRO_GUITAR_22	12
 #define EOF_TRACK_DRUM_PS		13
 #define EOF_TRACK_PRO_GUITAR_B	14
+#define EOF_TRACK_DRUM_DTX		15
+#define EOF_TRACK_PRO_GUITAR_22_BONUS 16
 #define EOF_TRACK_PRO_KEYS		0
 #define EOF_TRACK_HARM          0
 	//Leave the harmonics and pro keys macro defined to 0 to ensure MIDI import knows they're not supported tracks
@@ -442,7 +444,7 @@ typedef struct
 
 } EOF_VOCAL_TRACK;
 
-#define EOF_PRO_GUITAR_TRACKS_MAX	5
+#define EOF_PRO_GUITAR_TRACKS_MAX	7
 #define EOF_TUNING_LENGTH 6	//For now, the tuning array will only track 6 strings
 #define EOF_NUM_DEFINED_CHORDS 37
 #define EOF_COMBO_ARRANGEMENT 1
@@ -828,7 +830,7 @@ void eof_enforce_midi_section_endings(int silent);
 	//If a section would have been extended by 1ms but couldn't because it would then include a note that wasn't originally in the section, that note is highlighted
 	//If silent is zero, a dialog message is displayed to the user explaining the outcome of this function
 
-unsigned long eof_count_track_lanes(EOF_SONG *sp, unsigned long track);		//Returns the number of lanes in the specified legacy or pro guitar track, otherwise the default value of 5.  The value returned is expected to be less than EOF_MAX_FRETS
+unsigned long eof_count_track_lanes(EOF_SONG *sp, unsigned long track);		//Returns the number of lanes in the specified track, or the default of 5.  The value returned is expected to be less than EOF_MAX_FRETS
 int eof_track_add_trill(EOF_SONG *sp, unsigned long track, unsigned long start_pos, unsigned long end_pos);	//Adds a trill phrase at the specified start and stop timestamp
 unsigned long eof_get_num_trills(EOF_SONG *sp, unsigned long track);		//Returns the number of trill phrases in the specified track, or 0 on error
 EOF_PHRASE_SECTION *eof_get_trill(EOF_SONG *sp, unsigned long track, unsigned long index);		//Returns a pointer to the specified trill phrase, or NULL on error
@@ -966,18 +968,12 @@ int eof_pro_guitar_track_add_tremolo(EOF_PRO_GUITAR_TRACK * tp, unsigned long st
 	//Adds a tremolo phrase at the specified start and stop timestamp for the specified track.  Returns nonzero on success
 	//If diff is not 0xFF, the tremolo phrase will apply to the specified track difficulty only
 void eof_pro_guitar_track_delete_tremolo(EOF_PRO_GUITAR_TRACK * tp, unsigned long index);	//Deletes the specified tremolo phrase and moves all phrases that follow back in the array one position
-int eof_adjust_note_slide(EOF_PRO_GUITAR_TRACK *tp, unsigned long notenum, int fret_diff);
-	//If the specified pro guitar note has a pitched or unpitched slide, adjust the end position by the specified difference
-	//Returns -1 if either slide type failed to be adjusted (ie. would bring the end position to 0 or higher than the track's fret count), which will also cause the note in question to be highlighted
-	//Returns 0 if no adjustments are applicable (ie. not a slide note or fret_diff is zero)
-	//Returns 1 if adjustments were made
 void eof_set_pro_guitar_fret_or_finger_number(char function, unsigned long value);
 	//If fingering view is NOT in effect, alters each selected pro guitar note's fret values on used strings (that match the eof_pro_guitar_fret_bitmask bitmask) based on the parameters:
 	//If function is 0, the applicable strings' fret values are set to the specified value
 	//If function is 1, the applicable strings' fret values are incremented
 	//If function is 2, the applicable strings' fret values are decremented
 	//If fingering view is in effect, the selected notes' finger values on used strings (that match the eof_pro_guitar_fret_bitmask bitmask) are set instead
-	//For notes that directly (not through tech notes) have a defined pitched or unpitched slide end position, that end position is also transposed if possible, or otherwise the note is highlighted if the slide ending cannot be transposed
 int eof_detect_string_gem_conflicts(EOF_PRO_GUITAR_TRACK *tp, unsigned long newnumstrings);
 	//If there are any gems on a string higher than the specified number of strings for the specified track, the highest used string number is returned
 	//0 is returned if there are no conflicts
@@ -1377,8 +1373,5 @@ unsigned long eof_get_pos_num_notes_after_timestamp(EOF_SONG *sp, unsigned long 
 	//If the track has static difficulties, only the active difficulty's notes are considered
 	//This is to find the target position of a "moveR" phrase, which repositions itself and any RS section/phrase at the same timestamp a specified number of notes after the phrase's position
 	//Returns 0 on error or if there is no such position that can be calculated
-
-unsigned long eof_get_pro_guitar_track_arrangement_type(EOF_SONG *sp, unsigned long track);
-	//Returns the specified pro guitar track's defined arrangement type, or ULONG_MAX upon error
 
 #endif

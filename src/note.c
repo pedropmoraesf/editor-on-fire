@@ -2202,7 +2202,7 @@ unsigned long eof_find_lyric_number(EOF_LYRIC * np)
 	return 0;
 }
 
-BITMAP *eof_create_fret_number_bitmap(EOF_PRO_GUITAR_NOTE *note, char *text, unsigned char stringnum, unsigned long padding, int textcol, int fillcol, int boxcol, FONT *fontptr)
+BITMAP *eof_create_fret_number_bitmap(EOF_PRO_GUITAR_NOTE *note, char *text, unsigned char stringnum, unsigned long padding, int textcol, int fillcol, int boxcol, FONT *font)
 {
 	BITMAP *fretbmp = NULL;
 	int height, width;
@@ -2210,7 +2210,7 @@ BITMAP *eof_create_fret_number_bitmap(EOF_PRO_GUITAR_NOTE *note, char *text, uns
 
 	if(!note && !text)
 		return NULL;	//Invalid parameters
-	if(!fontptr)
+	if(!font)
 		return NULL;
 
 	if(note != NULL)
@@ -2238,35 +2238,35 @@ BITMAP *eof_create_fret_number_bitmap(EOF_PRO_GUITAR_NOTE *note, char *text, uns
 		text = fretstring;	//This string will be rendered to the bitmap
 	}
 
-	width = text_length(fontptr, text) + padding + 1;	//The font in use doesn't look centered, so pad the left by one pixel
-	height = text_height(fontptr);
+	width = text_length(font, text) + padding + 1;	//The font in use doesn't look centered, so pad the left by one pixel
+	height = text_height(font);
 	fretbmp = create_bitmap(width, height);
 	if(fretbmp != NULL)
 	{	//Render the fret number on top of the 3D note
 		clear_to_color(fretbmp, fillcol);
 		rect(fretbmp, 0, 0, width - 1, height - 1, boxcol);	//Draw a border along the edge of this bitmap
-		textprintf_ex(fretbmp, fontptr, (padding / 2.0) + 1, 0, textcol, -1, "%s", text);	//Center the text between the padding (including one extra pixel for left padding), rounding to the right if the padding is an odd value
+		textprintf_ex(fretbmp, font, (padding / 2.0) + 1, 0, textcol, -1, "%s", text);	//Center the text between the padding (including one extra pixel for left padding), rounding to the right if the padding is an odd value
 	}
 
 	return fretbmp;
 }
 
-BITMAP *eof_create_text_bitmap(char *text, unsigned long padding, int textcol, int fillcol, FONT *fontptr, double scale)
+BITMAP *eof_create_text_bitmap(char *text, unsigned long padding, int textcol, int fillcol, FONT *font, double scale)
 {
 	BITMAP *bmp = NULL;
 	int height, width;
 
-	if(!text || !fontptr)
+	if(!text || !font)
 		return NULL;	//Invalid parameters
 
-	width = text_length(fontptr, text) + padding + 1;	//The font in use doesn't look centered, so pad the left by one pixel
-	height = text_height(fontptr);
+	width = text_length(font, text) + padding + 1;	//The font in use doesn't look centered, so pad the left by one pixel
+	height = text_height(font);
 	bmp = create_bitmap(width, height);
 	if(bmp != NULL)
 	{	//Render the fret number on top of the 3D note
 		clear_to_color(bmp, fillcol);
 		rect(bmp, 0, 0, width - 1, height - 1, textcol);	//Draw a border along the edge of this bitmap
-		textprintf_ex(bmp, fontptr, (padding / 2.0) + 1, 0, textcol, -1, "%s", text);	//Center the text between the padding (including one extra pixel for left padding), rounding to the right if the padding is an odd value
+		textprintf_ex(bmp, font, (padding / 2.0) + 1, 0, textcol, -1, "%s", text);	//Center the text between the padding (including one extra pixel for left padding), rounding to the right if the padding is an odd value
 
 		if((scale < 1.0 - DBL_EPSILON) || (scale > 1.0 + DBL_EPSILON))
 		{	//If the given scale factor is not close enough to 1.0 to be considered equivalent to 1.0
@@ -2717,7 +2717,7 @@ int eof_note_compare(EOF_SONG *sp, unsigned long track1, unsigned long note1, un
 	unsigned long tracknum, tracknum2;
 	unsigned long note1note, note2note;
 	unsigned long flags, flags2, eflags, eflags2;
-	unsigned char accent1, accent2, ghost1, ghost2, flam1, flam2, rimshot1, rimshot2, crossstick1, crossstick2, bellzone1, bellzone2, edgezone1, edgezone2;
+	unsigned char accent1, accent2, ghost1, ghost2;
 	long length, length2;
 
 	//Validate parameters
@@ -2744,16 +2744,6 @@ int eof_note_compare(EOF_SONG *sp, unsigned long track1, unsigned long note1, un
 		accent2 = eof_get_note_accent(sp, track2, note2);
 		ghost1 = eof_get_note_ghost(sp, track1, note1);
 		ghost2 = eof_get_note_ghost(sp, track2, note2);
-		flam1 = eof_get_note_flam(sp, track1, note1);
-		flam2 = eof_get_note_flam(sp, track2, note2);
-		rimshot1 = eof_get_note_rimshot(sp, track1, note1);
-		rimshot2 = eof_get_note_rimshot(sp, track2, note2);
-		crossstick1 = eof_get_note_crossstick(sp, track1, note1);
-		crossstick2 = eof_get_note_crossstick(sp, track2, note2);
-		bellzone1 = eof_get_note_bellzone(sp, track1, note1);
-		bellzone2 = eof_get_note_bellzone(sp, track2, note2);
-		edgezone1 = eof_get_note_edgezone(sp, track1, note1);
-		edgezone2 = eof_get_note_edgezone(sp, track2, note2);
 		if(flags != flags2)
 		{	//If the flags don't match
 			return 1;	//Return not equal
@@ -2768,26 +2758,6 @@ int eof_note_compare(EOF_SONG *sp, unsigned long track1, unsigned long note1, un
 		}
 		if(ghost1 != ghost2)
 		{	//If the ghost bitmasks don't match
-			return 1;	//Return not equal
-		}
-		if(flam1 != flam2)
-		{	//If the flam bitmasks don't match
-			return 1;	//Return not equal
-		}
-		if(rimshot1 != rimshot2)
-		{	//If the rimshot bitmasks don't match
-			return 1;	//Return not equal
-		}
-		if(crossstick1 != crossstick2)
-		{	//If the cross stick bitmasks don't match
-			return 1;	//Return not equal
-		}
-		if(bellzone1 != bellzone2)
-		{	//If the bellzone bitmasks don't match
-			return 1;	//Return not equal
-		}
-		if(edgezone1 != edgezone2)
-		{	//If the edgezone bitmasks don't match
 			return 1;	//Return not equal
 		}
 		length = eof_get_note_length(sp, track1, note1);
@@ -3106,7 +3076,7 @@ char eof_build_note_name(EOF_SONG *sp, unsigned long track, unsigned long note, 
 	unsigned long tracknum;
 	char **effective_note_names = eof_note_names;	//By default, use whichever sharp/flat preference the user has in effect
 	char **effective_slash_note_names = eof_slash_note_names;
-	char ks;	//Stores the key signature in effect at the note's position
+	char key;	//Stores the key signature in effect at the note's position
 
 	if((sp == NULL) || !track || (track >= sp->tracks) || (buffer == NULL) || (note >= eof_get_track_size(sp, track)))
 		return 0;	//Invalid parameters
@@ -3124,14 +3094,14 @@ char eof_build_note_name(EOF_SONG *sp, unsigned long track, unsigned long note, 
 	tracknum = sp->track[track]->tracknum;
 	if(eof_lookup_chord(sp->pro_guitar_track[tracknum], track, note, &scale, &chord, &isslash, &bassnote, 0, 0))
 	{	//If the chord lookup found a match
-		if(eof_get_effective_ks(sp, &ks, eof_get_note_pos(sp, track, note)))
+		if(eof_get_effective_ks(sp, &key, eof_get_note_pos(sp, track, note)))
 		{	//If there is a key signature in effect at the note's position, use the sharp/flat accidentals corresponding to that scale
-			if(ks < 0)
+			if(key < 0)
 			{
 				effective_note_names = eof_note_names_flat;	//A key using flat note names is in use
 				effective_slash_note_names = eof_slash_note_names_flat;
 			}
-			else if(ks > 0)
+			else if(key > 0)
 			{
 				effective_note_names = eof_note_names_sharp;	//A key using sharp note names is in use
 				effective_slash_note_names = eof_slash_note_names_sharp;
@@ -3160,7 +3130,7 @@ char eof_build_note_name_ignoring_ghosts(EOF_SONG *sp, unsigned long track, unsi
 	unsigned char backup;
 	char **effective_note_names = eof_note_names;	//By default, use whichever sharp/flat preference the user has in effect
 	char **effective_slash_note_names = eof_slash_note_names;
-	char ks;	//Stores the key signature in effect at the note's position
+	char key;	//Stores the key signature in effect at the note's position
 
 	if((sp == NULL) || !track || (track >= sp->tracks) || (buffer == NULL) || (note >= eof_get_track_size(sp, track)))
 		return 0;	//Invalid parameters
@@ -3180,14 +3150,14 @@ char eof_build_note_name_ignoring_ghosts(EOF_SONG *sp, unsigned long track, unsi
 	tp->note[note]->note &= ~tp->note[note]->ghost;	//Clear all of the ghosted gems from the note bitmask
 	if(eof_lookup_chord(tp, track, note, &scale, &chord, &isslash, &bassnote, 0, 0))
 	{	//If the chord lookup found a match
-		if(eof_get_effective_ks(sp, &ks, eof_get_note_pos(sp, track, note)))
+		if(eof_get_effective_ks(sp, &key, eof_get_note_pos(sp, track, note)))
 		{	//If there is a key signature in effect at the note's position, use the sharp/flat accidentals corresponding to that scale
-			if(ks < 0)
+			if(key < 0)
 			{
 				effective_note_names = eof_note_names_flat;	//A key using flat note names is in use
 				effective_slash_note_names = eof_slash_note_names_flat;
 			}
-			else if(ks > 0)
+			else if(key > 0)
 			{
 				effective_note_names = eof_note_names_sharp;	//A key using sharp note names is in use
 				effective_slash_note_names = eof_slash_note_names_sharp;

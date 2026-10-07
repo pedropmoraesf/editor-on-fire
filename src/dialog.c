@@ -194,14 +194,23 @@ void eof_prepare_menus(void)
 		}
 	}
 
+	eof_log("\tPreparing main menu", 3);
 	eof_prepare_main_menu();
+	eof_log("\tPreparing file menu", 3);
 	eof_prepare_file_menu();
+	eof_log("\tPreparing edit menu", 3);
 	eof_prepare_edit_menu();
+	eof_log("\tPreparing song menu", 3);
 	eof_prepare_song_menu();
+	eof_log("\tPreparing track menu", 3);
 	eof_prepare_track_menu();
+	eof_log("\tPreparing note menu", 3);
 	eof_prepare_note_menu();
+	eof_log("\tPreparing beat menu", 3);
 	eof_prepare_beat_menu();
+	eof_log("\tPreparing context menu", 3);
 	eof_prepare_context_menu();
+	eof_log("\tMenu preparation complete", 3);
 }
 
 void eof_color_dialog(DIALOG * dp, int fg, int bg)

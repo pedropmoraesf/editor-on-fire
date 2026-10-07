@@ -2,6 +2,7 @@
 #include "vorbis/vorbisfile.h"
 #include "vorbis/codec.h"
 #include <math.h>	//For sqrt()
+#include <stdint.h>
 #include "main.h"
 #include "utility.h"
 #include "beat.h"
@@ -42,14 +43,37 @@ SAMPLE *    eof_sound_clap4 = NULL;
 SAMPLE *    eof_sound_gas1 = NULL;
 SAMPLE *    eof_sound_gas2 = NULL;
 SAMPLE *    eof_sound_gas3 = NULL;
+
+/* Low-latency PART_REAL_DRUM_DTX preview samples.  These are generated once
+ * at startup and mixed directly in EOF's OGG callback, avoiding the latency
+ * and scheduling jitter of the operating system MIDI synthesizer. */
+enum
+{
+	EOF_DRUM_SAMPLE_KICK = 0,
+	EOF_DRUM_SAMPLE_SNARE,
+	EOF_DRUM_SAMPLE_SIDE,
+	EOF_DRUM_SAMPLE_HIHAT_CLOSED,
+	EOF_DRUM_SAMPLE_HIHAT_OPEN,
+	EOF_DRUM_SAMPLE_TOM_LOW,
+	EOF_DRUM_SAMPLE_TOM_MID,
+	EOF_DRUM_SAMPLE_TOM_HIGH,
+	EOF_DRUM_SAMPLE_CRASH,
+	EOF_DRUM_SAMPLE_RIDE,
+	EOF_DRUM_SAMPLE_COUNT
+};
+static SAMPLE *eof_sound_drum[EOF_DRUM_SAMPLE_COUNT] = {NULL};
+static unsigned eof_mix_drum_voice_cursor = 0;
+static uint32_t eof_drum_noise_state = 0x13579BDFU;
+
 EOF_MIX_VOICE eof_voice[EOF_MIX_MAX_CHANNELS];	//eof_voice[0] is "clap", eof_voice[1] is "metronome", eof_voice[2] is "vocal tone", eof_voice[3] is "vocal percussion"
 char eof_mix_claps_enabled = 0;
 char eof_mix_metronome_enabled = 0;
 char eof_mix_claps_note = 63; /* enable all by default */
 char eof_mix_vocal_tones_enabled = 0;
 char eof_mix_midi_tones_enabled = 0;
+char eof_mix_drum_tones_enabled = 0;	//GM percussion preview for PART_REAL_DRUM_DTX
 char eof_mix_percussion_enabled = 0;
-int eof_selected_percussion_cue = 28;	//The user selected percussion sound (cowbell by default), corresponds to the radio button in the eof_audio_cues_dialog[] array
+int eof_selected_percussion_cue = 17;	//The user selected percussion sound (cowbell by default), corresponds to the radio button in the eof_audio_cues_dialog[] array
 
 int eof_chart_volume = 100;	//Stores the volume level for the chart audio, specified as a percentage
 double eof_chart_volume_multiplier = 1.0;	//This is the value sqrt(volume/100.0), which must be multiplied to the voice's amplitude to adjust for the specified volume
@@ -68,6 +92,7 @@ char          eof_mix_speed_ticker;
 unsigned long eof_mix_sample_count = 0;
 double        eof_mix_sample_increment = 1.0;
 unsigned long eof_mix_next_guitar_note;
+unsigned long eof_mix_next_drum_note;
 unsigned long eof_mix_next_clap;
 unsigned long eof_mix_next_metronome;
 char eof_mix_next_metronome_pitch;
@@ -90,6 +115,15 @@ guitar_midi_note eof_guitar_notes[EOF_MAX_NOTES * 6] = {{0,0,0,0,0}};	//Each not
 int eof_mix_guitar_notes = 0;
 int eof_mix_current_guitar_note = 0;
 
+typedef struct {
+	unsigned long pos;
+	unsigned char note;
+} drum_midi_note;
+
+drum_midi_note eof_drum_notes[EOF_MAX_NOTES * 6] = {{0,0}};	//Each DTX event can have up to six simultaneous GM percussion notes
+int eof_mix_drum_notes = 0;
+int eof_mix_current_drum_note = 0;
+
 unsigned long eof_mix_note_pos[EOF_MAX_NOTES] = {0};
 unsigned long eof_mix_note_note[EOF_MAX_NOTES] = {0};
 unsigned long eof_mix_note_ms_pos[EOF_MAX_NOTES] = {0};	//Used to store the start positions of notes (for MIDI playback)
@@ -105,6 +139,172 @@ int eof_mix_current_metronome = 0;
 unsigned long eof_mix_percussion_pos[EOF_MAX_NOTES] = {0};
 int eof_mix_percussions = 0;
 int eof_mix_current_percussion = 0;
+
+static double eof_drum_noise(void)
+{
+	uint32_t x = eof_drum_noise_state;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	eof_drum_noise_state = x;
+	return ((double)(x & 0xFFFFU) / 32767.5) - 1.0;
+}
+
+static SAMPLE *eof_create_drum_sample(int type)
+{
+	const int rate = 44100;
+	double seconds = 0.4, phase = 0.0, previous_noise = 0.0;
+	unsigned long i, length;
+	SAMPLE *sp;
+	unsigned short *pcm;
+
+	switch(type)
+	{
+		case EOF_DRUM_SAMPLE_KICK: seconds = 0.42; break;
+		case EOF_DRUM_SAMPLE_SNARE: seconds = 0.38; break;
+		case EOF_DRUM_SAMPLE_SIDE: seconds = 0.16; break;
+		case EOF_DRUM_SAMPLE_HIHAT_CLOSED: seconds = 0.16; break;
+		case EOF_DRUM_SAMPLE_HIHAT_OPEN: seconds = 0.72; break;
+		case EOF_DRUM_SAMPLE_TOM_LOW: seconds = 0.58; break;
+		case EOF_DRUM_SAMPLE_TOM_MID: seconds = 0.50; break;
+		case EOF_DRUM_SAMPLE_TOM_HIGH: seconds = 0.44; break;
+		case EOF_DRUM_SAMPLE_CRASH: seconds = 1.35; break;
+		case EOF_DRUM_SAMPLE_RIDE: seconds = 1.10; break;
+		default: break;
+	}
+	length = (unsigned long)(seconds * rate);
+	sp = create_sample(16, 0, rate, length);
+	if(!sp || !sp->data)
+		return sp;
+	pcm = (unsigned short *)sp->data;
+
+	for(i = 0; i < length; i++)
+	{
+		double t = (double)i / (double)rate;
+		double n = eof_drum_noise();
+		double hp = n - previous_noise;
+		double signal = 0.0;
+		double freq;
+		previous_noise = n;
+
+		switch(type)
+		{
+			case EOF_DRUM_SAMPLE_KICK:
+				freq = 46.0 + 92.0 * exp(-t * 18.0);
+				phase += 2.0 * 3.14159265358979323846 * freq / rate;
+				signal = 0.96 * sin(phase) * exp(-t * 10.0);
+			break;
+			case EOF_DRUM_SAMPLE_SNARE:
+				signal = 0.68 * hp * exp(-t * 16.0) +
+				         0.28 * sin(2.0 * 3.14159265358979323846 * 185.0 * t) * exp(-t * 22.0);
+			break;
+			case EOF_DRUM_SAMPLE_SIDE:
+				signal = 0.82 * hp * exp(-t * 34.0) +
+				         0.18 * sin(2.0 * 3.14159265358979323846 * 720.0 * t) * exp(-t * 30.0);
+			break;
+			case EOF_DRUM_SAMPLE_HIHAT_CLOSED:
+				signal = 0.58 * hp * exp(-t * 46.0) +
+				         0.12 * sin(2.0 * 3.14159265358979323846 * 6100.0 * t) * exp(-t * 38.0);
+			break;
+			case EOF_DRUM_SAMPLE_HIHAT_OPEN:
+				signal = 0.48 * hp * exp(-t * 7.0) +
+				         0.10 * sin(2.0 * 3.14159265358979323846 * 5700.0 * t) * exp(-t * 8.0);
+			break;
+			case EOF_DRUM_SAMPLE_TOM_LOW:
+			case EOF_DRUM_SAMPLE_TOM_MID:
+			case EOF_DRUM_SAMPLE_TOM_HIGH:
+			{
+				double base = (type == EOF_DRUM_SAMPLE_TOM_LOW) ? 105.0 :
+				              ((type == EOF_DRUM_SAMPLE_TOM_MID) ? 145.0 : 205.0);
+				signal = (0.78 * sin(2.0 * 3.14159265358979323846 * base * t) +
+				          0.18 * sin(2.0 * 3.14159265358979323846 * base * 1.96 * t)) * exp(-t * 8.5) +
+				         0.08 * n * exp(-t * 22.0);
+			}
+			break;
+			case EOF_DRUM_SAMPLE_CRASH:
+				signal = 0.42 * hp * exp(-t * 2.8) +
+				         (0.16 * sin(2.0 * 3.14159265358979323846 * 430.0 * t) +
+				          0.13 * sin(2.0 * 3.14159265358979323846 * 671.0 * t) +
+				          0.10 * sin(2.0 * 3.14159265358979323846 * 953.0 * t)) * exp(-t * 3.1);
+			break;
+			case EOF_DRUM_SAMPLE_RIDE:
+				signal = 0.20 * hp * exp(-t * 4.0) +
+				         (0.24 * sin(2.0 * 3.14159265358979323846 * 510.0 * t) +
+				          0.18 * sin(2.0 * 3.14159265358979323846 * 785.0 * t) +
+				          0.12 * sin(2.0 * 3.14159265358979323846 * 1120.0 * t)) * exp(-t * 3.7);
+			break;
+			default:
+				signal = 0.4 * hp * exp(-t * 18.0);
+			break;
+		}
+
+		if(signal > 1.0) signal = 1.0;
+		if(signal < -1.0) signal = -1.0;
+		pcm[i] = (unsigned short)(32768.0 + signal * 30000.0);
+	}
+	return sp;
+}
+
+static int eof_drum_sample_for_gm(unsigned char note)
+{
+	switch(note)
+	{
+		case 35: case 36:
+			return EOF_DRUM_SAMPLE_KICK;
+		case 37:
+			return EOF_DRUM_SAMPLE_SIDE;
+		case 38: case 39: case 40:
+			return EOF_DRUM_SAMPLE_SNARE;
+		case 42: case 44: case 54:
+			return EOF_DRUM_SAMPLE_HIHAT_CLOSED;
+		case 46:
+			return EOF_DRUM_SAMPLE_HIHAT_OPEN;
+		case 41: case 43:
+			return EOF_DRUM_SAMPLE_TOM_LOW;
+		case 45: case 47:
+			return EOF_DRUM_SAMPLE_TOM_MID;
+		case 48: case 50:
+			return EOF_DRUM_SAMPLE_TOM_HIGH;
+		case 51: case 53: case 59:
+			return EOF_DRUM_SAMPLE_RIDE;
+		case 49: case 52: case 55: case 57:
+			return EOF_DRUM_SAMPLE_CRASH;
+		default:
+			if(note < 41) return EOF_DRUM_SAMPLE_SNARE;
+			if(note < 49) return EOF_DRUM_SAMPLE_HIHAT_CLOSED;
+			return EOF_DRUM_SAMPLE_CRASH;
+	}
+}
+
+static void eof_mix_trigger_drum_sample(unsigned char note)
+{
+	unsigned attempt, channel = EOF_MIX_DRUM_FIRST_CHANNEL;
+	int sample_index = eof_drum_sample_for_gm(note);
+	SAMPLE *sp = eof_sound_drum[sample_index];
+
+	if(!sp)
+		return;
+	for(attempt = 0; attempt < EOF_MIX_DRUM_CHANNELS; attempt++)
+	{
+		unsigned candidate = EOF_MIX_DRUM_FIRST_CHANNEL +
+			((eof_mix_drum_voice_cursor + attempt) % EOF_MIX_DRUM_CHANNELS);
+		if(!eof_voice[candidate].playing)
+		{
+			channel = candidate;
+			break;
+		}
+	}
+	if(attempt == EOF_MIX_DRUM_CHANNELS)
+		channel = EOF_MIX_DRUM_FIRST_CHANNEL + (eof_mix_drum_voice_cursor % EOF_MIX_DRUM_CHANNELS);
+
+	eof_mix_drum_voice_cursor = (channel - EOF_MIX_DRUM_FIRST_CHANNEL + 1U) % EOF_MIX_DRUM_CHANNELS;
+	eof_voice[channel].sp = sp;
+	eof_voice[channel].pos = 0;
+	eof_voice[channel].fpos = 0.0;
+	/* Volume/multiplier were precomputed in eof_mix_start(); keep the real-time
+	 * trigger path to pointer/index assignments only. */
+	eof_voice[channel].playing = 1;
+}
 
 void eof_mix_callback_common(void)
 {
@@ -173,8 +373,9 @@ void eof_mix_callback_common(void)
 		eof_mix_next_percussion = eof_mix_percussion_pos[eof_mix_current_percussion];
 	}
 
-	//Trigger MIDI tones
-	eof_play_queued_midi_tones();	//Played queued MIDI tones for pro guitar/bass notes
+	//Trigger instrument previews
+	eof_play_queued_midi_tones();	//Pro guitar/bass still uses the configured MIDI synth
+	eof_play_queued_drum_tones();	//DTX GM note numbers select sample-synchronous PCM drum sounds
 }
 
 void eof_mix_callback_stereo(void * buf, int length)
@@ -343,8 +544,8 @@ void eof_mix_find_claps(void)
 	eof_mix_claps = 0;
 	eof_mix_current_clap = 0;
 	tracknum = eof_song->track[eof_selected_track]->tracknum;
-	if(eof_track_is_pro_guitar_track(eof_song, eof_selected_track))
-	{	//If a pro guitar/bass track is active
+	if((eof_selected_track != EOF_TRACK_DRUM_DTX) && eof_track_is_pro_guitar_track(eof_song, eof_selected_track))
+	{	//If a normal pro guitar/bass track is active
 		tp = eof_song->pro_guitar_track[eof_song->track[eof_selected_track]->tracknum];
 	}
 
@@ -435,6 +636,46 @@ void eof_mix_find_claps(void)
 					if(eof_guitar_notes[eof_mix_guitar_notes].length < eof_min_midi_tone_length)
 						eof_guitar_notes[eof_mix_guitar_notes].length = eof_min_midi_tone_length;	//Ensure that queued MIDI tones are at least this long
 					eof_mix_guitar_notes++;
+				}
+			}
+		}
+	}
+
+	//Queue General MIDI percussion for PART_REAL_DRUM_DTX.
+	//The DTX track stores the actual GM percussion note in each used string's fret byte.
+	eof_mix_drum_notes = 0;
+	eof_mix_current_drum_note = 0;
+	if((eof_selected_track == EOF_TRACK_DRUM_DTX) && (eof_selected_track < eof_song->tracks) &&
+	   eof_song->track[eof_selected_track] && (eof_song->track[eof_selected_track]->track_format == EOF_PRO_GUITAR_TRACK_FORMAT))
+	{
+		EOF_PRO_GUITAR_TRACK *track = eof_song->pro_guitar_track[eof_song->track[eof_selected_track]->tracknum];
+
+		if(track)
+		{
+			for(i = 0; (i < track->notes) && (eof_mix_drum_notes < EOF_MAX_NOTES * 6); i++)
+			{
+				unsigned j;
+				unsigned long bitmask;
+				unsigned long pos;
+				EOF_PRO_GUITAR_NOTE *note = track->note[i];
+
+				if(!note || (note->type != eof_note_type))
+					continue;
+
+				/* PCM drum tones are mixed inside the audio callback, so no MIDI
+				 * latency compensation is needed.  Queue the hit at the chart's
+				 * exact note timestamp just like clap/metronome cues. */
+				pos = eof_mix_msec_to_sample(note->pos, alogg_get_wave_freq_ogg(eof_music_track));
+
+				for(j = 0, bitmask = 1; (j < 6U) && (eof_mix_drum_notes < EOF_MAX_NOTES * 6); j++, bitmask <<= 1)
+				{
+					unsigned midi_note;
+					if(!(note->note & bitmask))
+						continue;
+					midi_note = note->frets[j] & 0x7FU;
+					eof_drum_notes[eof_mix_drum_notes].pos = pos;
+					eof_drum_notes[eof_mix_drum_notes].note = (unsigned char)midi_note;
+					eof_mix_drum_notes++;
 				}
 			}
 		}
@@ -556,6 +797,13 @@ void eof_mix_init(void)
 	{
 		allegro_message("Couldn't load gas sound!");
 	}
+
+	for(i = 0; i < EOF_DRUM_SAMPLE_COUNT; i++)
+	{
+		eof_sound_drum[i] = eof_create_drum_sample(i);
+		if(!eof_sound_drum[i])
+			eof_log("	Warning: Couldn't create a low-latency drum preview sample", 1);
+	}
 }
 
 SAMPLE *eof_mix_load_ogg_sample(char *fn)
@@ -653,6 +901,15 @@ void eof_mix_exit(void)
 	destroy_sample(eof_sound_gas3);
 	eof_sound_gas3=NULL;
 
+	for(i = 0; i < EOF_DRUM_SAMPLE_COUNT; i++)
+	{
+		if(eof_sound_drum[i])
+		{
+			destroy_sample(eof_sound_drum[i]);
+			eof_sound_drum[i] = NULL;
+		}
+	}
+
 	for(i = 0; i < EOF_MAX_VOCAL_TONES; i++)
 	{
 		if(eof_sound_note[i] != NULL)
@@ -729,6 +986,17 @@ void eof_mix_start_helper(void)
 			break;
 		}
 	}
+	eof_mix_current_drum_note = -1;
+	eof_mix_next_drum_note = -1;
+	for(i = 0; i < eof_mix_drum_notes; i++)
+	{
+		if(eof_drum_notes[i].pos >= eof_mix_sample_count)
+		{
+			eof_mix_current_drum_note = i;
+			eof_mix_next_drum_note = eof_drum_notes[i].pos;
+			break;
+		}
+	}
 
 	if(eof_disable_sound_processing)
 	{	//If callback processing is disabled
@@ -747,6 +1015,7 @@ void eof_mix_start_helper(void)
 void eof_mix_start(int speed)
 {
 	unsigned long i;
+	int drum_volume;
 
 	eof_log("eof_mix_start() entered", 1);
 
@@ -773,6 +1042,18 @@ void eof_mix_start(int speed)
 	eof_voice[3].volume = eof_percussion_volume;	//Put the percussion volume into effect
 	eof_voice[3].multiplier = sqrt(eof_percussion_volume/100.0);	//Store this math so it only needs to be performed once
 
+	drum_volume = eof_midi_tone_volume;
+	if(drum_volume < 0)
+		drum_volume = 0;
+	else if(drum_volume > 100)
+		drum_volume = 100;
+	for(i = EOF_MIX_DRUM_FIRST_CHANNEL; i < EOF_MIX_MAX_CHANNELS; i++)
+	{
+		eof_voice[i].volume = drum_volume;
+		eof_voice[i].multiplier = sqrt(drum_volume / 100.0);
+	}
+	eof_mix_drum_voice_cursor = 0;
+
 	eof_mix_speed = speed;
 	eof_mix_speed_ticker = 0;
 	eof_mix_sample_count = eof_mix_msec_to_sample(alogg_get_pos_msecs_ogg_ul(eof_music_track), alogg_get_wave_freq_ogg(eof_music_track));
@@ -795,6 +1076,8 @@ void eof_mix_seek(unsigned long pos)
 	eof_mix_next_metronome = -1;
 	eof_mix_next_note = -1;
 	eof_mix_next_percussion = -1;
+	eof_mix_next_guitar_note = -1;
+	eof_mix_next_drum_note = -1;
 
 	if(eof_disable_sound_processing)	//If sound cues are disabled
 		return;							//Don't do anything here
@@ -846,6 +1129,15 @@ void eof_mix_seek(unsigned long pos)
 		{
 			eof_mix_current_guitar_note = i;
 			eof_mix_next_guitar_note = eof_guitar_notes[i].pos;
+			break;
+		}
+	}
+	for(i = 0; i < eof_mix_drum_notes; i++)
+	{
+		if(eof_drum_notes[i].pos >= eof_mix_sample_count)
+		{
+			eof_mix_current_drum_note = i;
+			eof_mix_next_drum_note = eof_drum_notes[i].pos;
 			break;
 		}
 	}
@@ -1078,5 +1370,27 @@ void eof_play_queued_midi_tones(void)
 		}
 		eof_mix_current_guitar_note++;
 		eof_mix_next_guitar_note = eof_guitar_notes[eof_mix_current_guitar_note].pos;
+	}
+}
+
+void eof_midi_play_drum_note(unsigned char note)
+{
+	/* Kept as the public immediate-preview entry point, but deliberately does
+	 * not use midi_out(): the OS MIDI synth adds audible latency. */
+	if(eof_midi_tone_volume > 0)
+		eof_mix_trigger_drum_sample(note);
+}
+
+void eof_play_queued_drum_tones(void)
+{
+	while((eof_mix_sample_count >= eof_mix_next_drum_note) && (eof_mix_current_drum_note < eof_mix_drum_notes))
+	{	//A while loop lets every piece in a simultaneous DTX hit fire on the exact same audio sample.
+		if(eof_mix_drum_tones_enabled)
+			eof_midi_play_drum_note(eof_drum_notes[eof_mix_current_drum_note].note);
+		eof_mix_current_drum_note++;
+		if(eof_mix_current_drum_note < eof_mix_drum_notes)
+			eof_mix_next_drum_note = eof_drum_notes[eof_mix_current_drum_note].pos;
+		else
+			eof_mix_next_drum_note = (unsigned long)-1;
 	}
 }

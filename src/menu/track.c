@@ -447,6 +447,11 @@ void eof_prepare_track_menu(void)
 		{	//For each track supported by EOF
 			eof_menu_track_clone_from_menu[i].flags = D_DISABLED;
 
+			/* Optional tail tracks may not exist in older projects.  EOF_TRACKS_MAX
+			 * is a capacity, not a guarantee that every slot is populated. */
+			if((i + 1 >= eof_song->tracks) || (eof_song->track[i + 1] == NULL))
+				continue;
+
 			if(i + 1 == EOF_TRACK_VOCALS)
 				continue;	//This function cannot be used with the vocal track since there isn't a second such track
 			if(i + 1 == EOF_TRACK_DANCE)

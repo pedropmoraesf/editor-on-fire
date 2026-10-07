@@ -19,6 +19,7 @@
 #include "track.h"	//For tech view functions
 #include "main.h"
 #include "context.h"
+#include "../fingering.h"
 
 #ifdef USEMEMWATCH
 #include "../memwatch.h"
@@ -826,7 +827,7 @@ MENU eof_note_beatable_menu[] =
 
 MENU eof_note_lyrics_menu[] =
 {
-	{"&Edit Lyric\tL / N", eof_edit_lyric_dialog, NULL, 0, NULL},
+	{"&Edit Lyric\tL", eof_edit_lyric_dialog, NULL, 0, NULL},
 	{"Split Lyric\tShift+S", eof_menu_split_lyric, NULL, 0, NULL},
 	{"&Lyric Lines", NULL, eof_lyric_line_menu, 0, NULL},
 	{"&Freestyle", NULL, eof_note_freestyle_menu, 0, NULL},
@@ -950,6 +951,7 @@ MENU eof_note_menu[] =
 	{"Simplif&Y", NULL, eof_note_simplify_menu, 0, NULL},
 	{"Dis&Jointed", NULL, eof_note_disjointed_menu, 0, NULL},
 	{"Remove statuses", eof_menu_remove_statuses, NULL, 0, NULL},
+	{"Optimize fingering", eof_menu_note_optimize_fingering, NULL, 0, NULL},
 	{NULL, NULL, NULL, 0, NULL}
 };
 
@@ -2126,8 +2128,7 @@ int eof_menu_note_pitched_transpose(int dir, char option)
 	unsigned long notectr, stringctr, targetstring, bitmask;
 	EOF_PRO_GUITAR_TRACK *tp;
 	int note_selection_updated = eof_update_implied_note_selection();	//If no notes are selected, take start/end selection and Feedback input mode into account
-	unsigned char pitchmask, pitches[6] = {0}, stringpitch, note, ghost, before;
-	int fret_diff = 0;
+	unsigned char pitchmask, pitches[6] = {0}, stringpitch, note, ghost;
 	char warned = 0;
 
 	if(dir > 1)
@@ -2175,39 +2176,23 @@ int eof_menu_note_pitched_transpose(int dir, char option)
 				if(targetstring >= tp->numstrings)
 					continue;	//If transposing up and this is the highest string, skip it
 
-				//Transpose the note
 				if(pitchmask & bitmask)
 				{	//If this string has a pitch to transpose
-					mutestatus = tp->note[notectr]->frets[stringctr] & 0x80;	//Retain the string mute status if present
-					before = tp->note[notectr]->frets[stringctr] & 0x7F;		//Remember the original fret used for this note (masking out the mute status)
+					mutestatus = tp->pgnote[notectr]->frets[stringctr] & 0x80;	//Retain the string mute status if present
 					stringpitch =  tp->tuning[targetstring] + eof_lookup_default_string_tuning_absolute(tp, eof_selected_track, targetstring) + tp->capo;	//Determine the pitch of the string the note pitch will transpose to
 					if(stringpitch > pitches[stringctr])
 						return 0;	//Logic error
 					newfrets[targetstring] = pitches[stringctr] - stringpitch;
-					fret_diff = newfrets[targetstring] - before;	//Track how many frets the note changed
 					newfrets[targetstring] |= mutestatus;	//Reapply the string mute status if applicable
 					if(newfrets[targetstring] > tp->numfrets)
 						return 0;	//Logic error
 				}
 				else
 				{	//There is no pitch (ie. this string isn't used, or is a ghosted or string muted gem)
-					newfrets[targetstring] = tp->note[notectr]->frets[stringctr];	//Retain the string's existing fret value and transpose it up/down one string
+					newfrets[targetstring] = tp->pgnote[notectr]->frets[stringctr];	//Retain the string's existing fret value and transpose it up/down one string
 				}
 			}
-			memcpy(tp->note[notectr]->frets, newfrets, sizeof(newfrets));
-
-			//Transpose the note's slide end position if applicable
-			if(eof_adjust_note_slide(tp, notectr, fret_diff) < 0)
-			{	//If the slide note failed to be adjusted
-				if(!eof_suppress_pitched_transpose_warning && !warned)
-				{
-					if(alert("At least one selected note's slide could not pitch transpose", "", "They will be highlighted.", "OK", "Don't warn me", 0, 0) == 2)
-					{	//If user opts opts to suppress this warning
-						eof_suppress_pitched_transpose_warning = 1;
-					}
-					warned = 1;
-				}
-			}
+			memcpy(tp->pgnote[notectr]->frets, newfrets, sizeof(newfrets));
 
 			//Transpose the note bitmask
 			if(dir < 0)
@@ -8075,8 +8060,8 @@ int eof_correct_chord_fingerings_option(char report, char *undo_made)
 	memset(&eof_selection, 0, sizeof(EOF_SELECTION_DATA));	//Clear the note selection
 	for(ctr = 1; ctr < eof_song->tracks; ctr++)
 	{	//For each track (skipping the global track, 0)
-		if(!eof_track_is_pro_guitar_track(eof_song, ctr))
-			continue;	//If this isn't a pro guitar track, skip it
+		if((ctr == EOF_TRACK_DRUM_DTX) || !eof_track_is_pro_guitar_track(eof_song, ctr))
+			continue;	//DTX stores MIDI drum numbers in fret fields and is not a guitar fingering track
 
 		restore_tech_view = eof_menu_track_get_tech_view_state(eof_song, ctr);
 		eof_menu_track_set_tech_view_state(eof_song, ctr, 0); //Disable tech view if applicable

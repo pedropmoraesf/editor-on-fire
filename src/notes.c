@@ -1247,7 +1247,7 @@ int eof_expand_notes_window_macro(char *macro, char *dest_buffer, unsigned long 
 	if(!ustricmp(macro, "SELECTED_NOTE_END_POS"))
 	{
 		if(eof_selection.current < tracksize)
-			snprintf(dest_buffer, dest_buffer_size, "%lu", eof_get_note_pos(eof_song, eof_selected_track, eof_selection.current) + eof_get_note_length(eof_song, eof_selected_track, eof_selection.current));
+			snprintf(dest_buffer, dest_buffer_size, "%ld", eof_get_note_pos(eof_song, eof_selected_track, eof_selection.current) + eof_get_note_length(eof_song, eof_selected_track, eof_selection.current));
 		else
 			snprintf(dest_buffer, dest_buffer_size, "None");
 		return 1;
@@ -1357,7 +1357,7 @@ int eof_expand_notes_window_macro(char *macro, char *dest_buffer, unsigned long 
 				int scale = 0, chord = 0, isslash = 0, bassnote = 0;
 				char **effective_note_names = eof_note_names;	//By default, use whichever sharp/flat preference the user has in effect
 				char **effective_slash_note_names = eof_slash_note_names;
-				char ks;	//Stores the key signature in effect at the note's position
+				char key;	//Stores the key signature in effect at the note's position
 
 				matchcount = eof_count_chord_lookup_matches(tp, eof_selected_track, eof_selection.current);
 				if(matchcount)
@@ -1369,14 +1369,14 @@ int eof_expand_notes_window_macro(char *macro, char *dest_buffer, unsigned long 
 					{	//If there's more than one match
 						(void) snprintf(chord_match_string, sizeof(chord_match_string) - 1, " (match %lu/%lu)", eof_selected_chord_lookup + 1, matchcount);
 					}
-					if(eof_get_effective_ks(eof_song, &ks, eof_get_note_pos(eof_song, eof_selected_track, eof_selection.current)))
+					if(eof_get_effective_ks(eof_song, &key, eof_get_note_pos(eof_song, eof_selected_track, eof_selection.current)))
 					{	//If there is a key signature in effect at the selected note's position, use the sharp/flat accidentals corresponding to that scale
-						if(ks < 0)
+						if(key < 0)
 						{
 							effective_note_names = eof_note_names_flat;	//A key using flat note names is in use
 							effective_slash_note_names = eof_slash_note_names_flat;
 						}
-						else if(ks > 0)
+						else if(key > 0)
 						{
 							effective_note_names = eof_note_names_sharp;	//A key using sharp note names is in use
 							effective_slash_note_names = eof_slash_note_names_sharp;
@@ -3353,51 +3353,6 @@ int eof_expand_notes_window_conditional_macro(char *macro, char *dest_buffer, un
 		return 2;	//False
 	}
 
-	//A Rock Band 3 guitar pro guitar track is active
-	if(!ustricmp(macro, "IF_IS_ROCK_BAND_3_PRO_GUITAR_TRACK"))
-	{
-		if((eof_selected_track == EOF_TRACK_PRO_GUITAR) || (eof_selected_track == EOF_TRACK_PRO_GUITAR_22))
-		{
-			dest_buffer[0] = '\0';
-			return 3;	//True
-		}
-
-		return 2;	//False
-	}
-
-	//A Rock Band 3 bass pro guitar track is active
-	if(!ustricmp(macro, "IF_IS_ROCK_BAND_3_PRO_BASS_TRACK"))
-	{
-		if((eof_selected_track == EOF_TRACK_PRO_BASS) || (eof_selected_track == EOF_TRACK_PRO_BASS_22))
-		{
-			dest_buffer[0] = '\0';
-			return 3;	//True
-		}
-
-		return 2;	//False
-	}
-
-	//If the active track's lane count is a specific number
-	count_string = strcasestr_spec(macro, "IF_TRACK_LANE_COUNT_IS_");	//Get a pointer to the text that would be the difficulty number
-	if(count_string)
-	{	//If the macro is this string
-		unsigned long lanecount;
-
-		if(eof_track_is_legacy_track(eof_song, eof_selected_track) || eof_track_is_pro_guitar_track(eof_song, eof_selected_track))
-		{	//If a legacy or pro guitar track is active
-			if(eof_read_macro_number(count_string, &lanecount))
-			{	//If the lane count number was successfully parsed
-				if(eof_count_track_lanes(eof_song, eof_selected_track) == lanecount)
-				{	//If the number is the active track's lane count
-					dest_buffer[0] = '\0';
-					return 3;	//True
-				}
-			}
-		}
-
-		return 2;	//False
-	}
-
 	//A track that is in BEATABLE mode is active
 	if(!ustricmp(macro, "IF_IS_BEATABLE_TRACK"))
 	{
@@ -3642,9 +3597,9 @@ int eof_expand_notes_window_conditional_macro(char *macro, char *dest_buffer, un
 				dest_buffer[0] = '\0';
 				return 3;	//True
 			}
-		}
 
-		return 2;	//False
+			return 2;	//False
+		}
 	}
 
 	//If the active difficulty is Easy (Rock Band difficulty labeling)
@@ -3824,9 +3779,9 @@ int eof_expand_notes_window_conditional_macro(char *macro, char *dest_buffer, un
 				dest_buffer[0] = '\0';
 				return 3;	//True
 			}
-		}
 
-		return 2;	//False
+			return 2;	//False
+		}
 	}
 
 	if(!ustricmp(macro, "IF_TRACK_DIFF_HAS_INVALID_DRUM_CHORDS"))
@@ -3847,9 +3802,9 @@ int eof_expand_notes_window_conditional_macro(char *macro, char *dest_buffer, un
 					}
 				}
 			}
-		}
 
-		return 2;	//False
+			return 2;	//False
+		}
 	}
 
 	if(!ustricmp(macro, "IF_NONZERO_MIDI_DELAY"))
@@ -4046,6 +4001,7 @@ int eof_expand_notes_window_conditional_macro(char *macro, char *dest_buffer, un
 			dest_buffer[0] = '\0';
 			return 3;	//True
 		}
+
 		return 2;	//False
 	}
 
@@ -4056,6 +4012,7 @@ int eof_expand_notes_window_conditional_macro(char *macro, char *dest_buffer, un
 			dest_buffer[0] = '\0';
 			return 3;	//True
 		}
+
 		return 2;	//False
 	}
 
@@ -4067,6 +4024,7 @@ int eof_expand_notes_window_conditional_macro(char *macro, char *dest_buffer, un
 			dest_buffer[0] = '\0';
 			return 3;	//True
 		}
+
 		return 2;	//False
 	}
 
@@ -4749,11 +4707,6 @@ int eof_expand_notes_window_conditional_macro(char *macro, char *dest_buffer, un
 	{
 		if(tp)
 		{	//If the active track is a pro guitar track
-			if(!tp->tonechanges)
-			{	//If there are no tone changes
-				dest_buffer[0] = '\0';
-				return 3;	//True
-			}
 			eof_track_rebuild_rs_tone_names_list_strings(eof_selected_track, 1);
 			if(eof_track_rs_tone_names_list_strings_num > 1)
 			{	//If multiple tones are used

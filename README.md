@@ -1,3 +1,20 @@
+# EOF — Unofficial modified edition (Pedro Paulo Moraes)
+
+This repository contains an independently modified version of **Editor on Fire (EOF)**, originally developed by **T^3 Software and contributors**.
+
+- **Original project:** https://github.com/raynebc/editor-on-fire
+- **Modified source:** https://github.com/pedropmoraesf/editor-on-fire
+- **DTXMania editing and export documentation:** [README_DTXMANIA.md](README_DTXMANIA.md)
+- **License:** [license.txt](license.txt) (BSD 3-Clause). Original copyright notices and license terms are retained. Bundled third-party components may have their own licenses.
+
+This is an **unofficial, community-maintained modification**, not an official EOF build. T^3 Software and the original contributors do not endorse this edition. Features are under development; test builds before relying on them for chart authoring.
+
+> **Português:** Esta é uma versão modificada e não oficial do Editor on Fire, com alterações para edição e exportação DTXMania, entre outras funcionalidades. O código original e os avisos de licença foram preservados. O desenvolvimento é independente dos autores originais.
+
+---
+
+## Original EOF documentation
+
 EOF is a song editor for Rocksmith, IMMERROCK, Drums Rock, YARG, Clone Hero, Rock Band, Phase Shift, Frets On Fire and similar rhythm games. The aim of EOF is to provide a simple process with which to create songs. Just provide an OGG file and spend a little time designing note charts and EOF will save files in the appropriate format for immediate use with Frets on Fire, Phase Shift, Clone Hero, Performous and similar games.  Combined with other game-specific tools, you can author charts for games such as Rock Band and Rocksmith.
 
 

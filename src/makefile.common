@@ -1,5 +1,97 @@
-OFILES = modules/ocd3d.o modules/wfsel.o modules/gametime.o modules/g-idle.o dialog/main.o dialog/proc.o main.o player.o config.o window.o dialog.o legacy.o midi.o ini.o song.o note.o beat.o event.o undo.o mix.o control.o editor.o utility.o chart_import.o midi_import.o ini_import.o waveform.o silence.o tuning.o gp_import.o midi_data_import.o gh_import.o rs.o rs_import.o spectrogram.o notefunc.o minibpm-1.0/src/MiniBpm.o minibpm-1.0/src/minibpm-c.o bpm.o bf.o bf_import.o notes.o music_pos.o dr.o ir.o beatable.o sm.o drumbeats.o smashdrums.o $(PLATFORM_OFILES)
+# The platform makefiles include this file before declaring their `all` target.
+# The explicit DTX object rules below would otherwise become GNU make's default
+# goal, causing a plain `make` to compile only one hooked object and then stop.
+.DEFAULT_GOAL := all
+
+OFILES = modules/ocd3d.o modules/wfsel.o modules/gametime.o modules/g-idle.o dialog/main.o dialog/proc.o main.o player.o config.o window.o dialog.o legacy.o midi.o ini.o song.o note.o beat.o event.o undo.o mix.o control.o editor.o utility.o chart_import.o midi_import.o ini_import.o waveform.o silence.o tuning.o gp_import.o gpif_import.o tg_import.o gp_advanced.o gp_synth.o gp_synth_process_hook.o project_autosave.o audio_normalize.o tone_analysis.o tone_analysis_hq.o tone_workflow.o psarc_export.o psarc_dialog.o bass_display.o dtx_export_v2.o dtx_import.o dtx_synth.o dtx_integration.o dtx_xml.o dtx_workflow.o dtx_dialog.o dtx_3d.o dtx_mix.o dtx_preview.o midi_data_import.o gh_import.o rs.o rs_import.o spectrogram.o notefunc.o minibpm-1.0/src/MiniBpm.o minibpm-1.0/src/minibpm-c.o bpm.o bf.o bf_import.o notes.o music_pos.o dr.o ir.o beatable.o sm.o drumbeats.o fingering.o smashdrums.o $(PLATFORM_OFILES)
 MENUOFILES = menu/file.o menu/edit.o menu/song.o menu/note.o menu/beat.o menu/help.o menu/main.o menu/context.o menu/track.o
 ALOGGOFILES = alogg/src/alogg.o
 AGUPOFILES = agup/aalg.o agup/aase.o agup/abeos.o  agup/abitmap.o  agup/agtk.o  agup/agup.o  agup/ans.o  agup/aphoton.o  agup/awin95.o
 LCOFILES = foflc/LRC_parse.o foflc/Lyric_storage.o foflc/Midi_parse.o foflc/Script_parse.o foflc/UStar_parse.o foflc/VL_parse.o foflc/ID3_parse.o foflc/SRT_parse.o foflc/XML_parse.o foflc/JB_parse.o foflc/RS_parse.o lc_import.o
+
+# song.h defines EOF_SONG's binary layout and global track limits.  A change to
+# either must rebuild every EOF translation unit that may access those fields;
+# otherwise incremental builds can mix objects compiled against incompatible
+# struct layouts and crash while loading/preparing a project.
+$(OFILES) $(MENUOFILES): song.h
+
+# DTX integration hooks are injected only into the translation units that need
+# them.  Track selection is event-driven; rendering no longer changes editor
+# state, which keeps transport and Rocksmith export temporary state intact.
+menu/file.o: menu/file.c dtx_gp_import_hook.h dtx_integration.h dtx_xml.h dtx_import.h gp_advanced.h project_autosave.h audio_normalize_file_hook.h audio_normalize.h
+	$(CC) $(CFLAGS) -include dtx_gp_import_hook.h -include audio_normalize_file_hook.h -c -o $@ $<
+
+menu/song.o: menu/song.c dtx_track_select_hook.h dtx_workflow.h audio_normalize_song_hook.h audio_normalize.h
+	$(CC) $(CFLAGS) -include dtx_track_select_hook.h -include audio_normalize_song_hook.h -c -o $@ $<
+
+main.o: main.c dtx_exit_hook.h dtx_workflow.h dtx_3d.h gp_advanced.h tone_analysis.h tone_analysis_hq.h tone_workflow.h psarc_export.h audio_normalize.h
+	$(CC) $(CFLAGS) -include dtx_exit_hook.h -c -o $@ $<
+
+dialog.o: dialog.c gp_advanced_menu_hook.h gp_advanced.h bass_display.h
+	$(CC) $(CFLAGS) -include gp_advanced_menu_hook.h -c -o $@ $<
+
+mix.o: mix.c dtx_mix_hook.h dtx_mix.h
+	$(CC) $(CFLAGS) -include dtx_mix_hook.h -c -o $@ $<
+
+editor.o: editor.c dtx_render_hook.h dtx_integration.h dtx_import.h
+	$(CC) $(CFLAGS) -include dtx_render_hook.h -c -o $@ $<
+dtx_export_v2.o: dtx_export_v2.c dtx_dialog_hook.h dtx_dialog.h dtx_preview.h dtx_import.h dtx_synth.h
+	$(CC) $(CFLAGS) -include dtx_dialog_hook.h -c -o $@ $<
+dtx_import.o: dtx_import.c dtx_import.h dtx_workflow.h gp_synth_process_hook.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+dtx_synth.o: dtx_synth.c dtx_synth.h gp_synth_process_hook.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+dtx_workflow.o: dtx_workflow.c dtx_workflow.h dtx_import.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+dtx_preview.o: dtx_preview.c dtx_preview_process_hook.h dtx_preview.h
+	$(CC) $(CFLAGS) -include dtx_preview_process_hook.h -c -o $@ $<
+dtx_integration.o: dtx_integration.c dtx_integration_color_hook.h
+	$(CC) $(CFLAGS) -include dtx_integration_color_hook.h -c -o $@ $<
+
+gp_advanced.o: gp_advanced.c gp_advanced.h gp_synth.h gp_advanced_classify.inc gp_advanced_controls.inc gp_advanced_merge.inc gp_advanced_timing.inc gp_advanced_ui.inc gp_advanced_commit.inc
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+tg_import.o: tg_import.c tg_import.h gp_import.h song.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+gp_synth.o: gp_synth.c gp_synth.h gp_advanced.h gp_synth_process_hook.h
+	$(CC) $(CFLAGS) -include gp_synth_process_hook.h -c -o $@ $<
+
+gp_synth_process_hook.o: gp_synth_process_hook.c gp_synth_process_hook.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+audio_normalize.o: audio_normalize.c audio_normalize.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+
+tone_analysis.o: tone_analysis.c tone_analysis.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+tone_analysis_hq.o: tone_analysis_hq.c tone_analysis_hq.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+tone_workflow.o: tone_workflow.c tone_workflow.h tone_analysis.h tone_analysis_hq.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+psarc_export.o: psarc_export.c psarc_export.h tone_workflow.h tone_analysis.h tone_analysis_hq.h psarc_export_null_compat.h psarc_helper_launch_compat.h psarc_dialog.h audio_normalize_psarc_export_hook.h audio_normalize.h psarc_stick_sample_hook.h psarc_stick_sample_v2_hook.h psarc_direct_system_hook.h psarc_fluidsynth_countin_hook.h gp_synth_process_hook.h
+	$(CC) $(CFLAGS) -include psarc_export_null_compat.h -include psarc_helper_launch_compat.h -include audio_normalize_psarc_export_hook.h -include psarc_stick_sample_hook.h -include psarc_stick_sample_v2_hook.h -include psarc_direct_system_hook.h -include psarc_fluidsynth_countin_hook.h -c -o $@ $<
+
+psarc_dialog.o: psarc_dialog.c psarc_dialog.h psarc_export.h audio_normalize_psarc_dialog_hook.h audio_normalize.h
+	$(CC) $(CFLAGS) -include audio_normalize_psarc_dialog_hook.h -c -o $@ $<
+dtx_dialog.o: dtx_dialog.c dtx_dialog.h dtx_import.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+dtx_xml.o: dtx_xml.c dtx_xml.h dtx_integration.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+bass_display.o: bass_display.c bass_display.h menu/song.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Keep the Viterbi fingering implementation in one place.  This build hook only
+# exposes its existing worker so Guitar Pro (Rocksmith Advanced) can call the
+# exact same optimizer without duplicating the algorithm.
+fingering.o: fingering.c fingering_public_hook.h
+	$(CC) $(CFLAGS) -include fingering_public_hook.h -c -o $@ $<

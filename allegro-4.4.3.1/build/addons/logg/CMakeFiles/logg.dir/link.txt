@@ -1,0 +1,2 @@
+C:/msys64/mingw32/bin/ar.exe qc ../../lib/liblogg.a CMakeFiles/logg.dir/logg.c.obj
+C:/msys64/mingw32/bin/ranlib.exe ../../lib/liblogg.a

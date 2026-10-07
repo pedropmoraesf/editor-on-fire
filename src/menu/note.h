@@ -25,6 +25,11 @@ int eof_menu_solo_unmark(void);
 int eof_menu_solo_erase_all(void);
 int eof_menu_solo_edit_timing(void);	//Uses eof_phrase_edit_timing() to edit the timings of the selected solo phrase (if such a phrase is defined)
 
+int eof_menu_note_edit_pro_guitar_note_frets_fingers_menu(void);
+int eof_menu_note_selectively_edit_pro_guitar_note_fingers(void);
+int eof_menu_note_optimize_fingering(void); // <-- Adicione esta linha
+long eof_previous_pro_guitar_note_needing_finger_definitions(EOF_PRO_GUITAR_TRACK * tp, unsigned long note);
+
 int eof_menu_star_power_mark(void);
 int eof_menu_star_power_unmark(void);
 int eof_menu_star_power_erase_all(void);
@@ -79,7 +84,6 @@ int eof_menu_note_pitched_transpose(int dir, char option);
 	//dir < 0 is transpose up, dir > 0 is transpose down
 	//If option is zero, this function only alters selected notes if ALL of them are capable of being transposed
 	//If option is nonzero, this function alters ANY selected notes that are capable of being transposed, and highlights those that cannot be transposed
-	//For notes that directly (not through tech notes) have a defined pitched or unpitched slide end position, that end position is also transposed if possible, or otherwise the note is highlighted if the slide ending cannot be transposed
 int eof_menu_note_pitched_transpose_up(void);
 	//Uses eof_menu_note_pitched_transpose() to transpose selected pro guitar normal notes up, with option 1
 int eof_menu_note_pitched_transpose_down(void);
@@ -680,6 +684,9 @@ unsigned long eof_find_first_selected_note(void);
 	//Returns the index of the first note in the active track that is selected, otherwise returns EOF_MAX_NOTES - 1
 
 int eof_menu_note_rename_as_lane_makeup(void);
+
+void eof_pro_guitar_optimize_fingering(char avoid_open);
+// Runs mathematical clustering across all selected notes to minimize string skipping and group frets locally.
 	//Renames each selected legacy note based on which lanes it uses (ie. "L12" for a chord using lanes 1 and 2
 
 #endif

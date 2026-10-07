@@ -1,7 +1,9 @@
 #ifndef EOF_MIX_H
 #define EOF_MIX_H
 
-#define EOF_MIX_MAX_CHANNELS 8
+#define EOF_MIX_DRUM_FIRST_CHANNEL 4
+#define EOF_MIX_DRUM_CHANNELS 8
+#define EOF_MIX_MAX_CHANNELS (EOF_MIX_DRUM_FIRST_CHANNEL + EOF_MIX_DRUM_CHANNELS)
 #define EOF_MAX_VOCAL_TONES 256
 
 typedef struct
@@ -21,7 +23,8 @@ extern char eof_mix_claps_enabled;
 extern char eof_mix_metronome_enabled;
 extern char eof_mix_claps_note;
 extern char eof_mix_vocal_tones_enabled;
-extern char eof_mix_midi_tones_enabled;	//Tracks whether MIDI tones are enabled
+extern char eof_mix_midi_tones_enabled;	//Tracks whether MIDI tones are enabled for pro guitar/bass
+extern char eof_mix_drum_tones_enabled;	//Tracks whether low-latency GM-mapped PCM drum tones are enabled for PART_REAL_DRUM_DTX
 extern char eof_mix_percussion_enabled;	//Tracks whether vocal percussion cues are enabled
 extern EOF_MIX_VOICE eof_voice[EOF_MIX_MAX_CHANNELS];
 extern int eof_chart_volume;				//Stores the volume level for the chart audio, specified as a percentage
@@ -108,6 +111,10 @@ void eof_play_pro_guitar_note_midi(EOF_SONG *sp, unsigned long track, unsigned l
 	//Immediately plays all the MIDI tones in the specified pro guitar note
 void eof_play_queued_midi_tones(void);
 	//Advances through and plays MIDI tones queued by eof_mix_find_claps(), similarly to how the OGG callback function plays other cues
+void eof_midi_play_drum_note(unsigned char note);
+	//Immediately triggers EOF's low-latency PCM sound mapped from the specified GM percussion note
+void eof_play_queued_drum_tones(void);
+	//Sample-synchronously fires queued PART_REAL_DRUM_DTX PCM percussion from the audio callback
 int eof_lookup_midi_tone(EOF_SONG *sp, unsigned long track, unsigned long note);
 	//Returns the appropriate MIDI instrument number to use for the specified note, or 0 on error
 

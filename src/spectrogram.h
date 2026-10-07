@@ -5,6 +5,9 @@
 #define DEFAULT_STARTFREQ 27.5
 #define DEFAULT_ENDFREQ 4186
 #define MINFREQ 27.5
+#define EOF_EXPERIMENTAL_SPECTROGRAM_WINDOWSIZE 4096
+#define EOF_EXPERIMENTAL_SPECTROGRAM_HOPSIZE 1024
+#define EOF_EXPERIMENTAL_SPECTROGRAM_DB_RANGE 90.0
 
 struct spectrogramslice
 {
@@ -37,11 +40,19 @@ struct spectrogramstruct
 	double *buffin;						//Allow multiple input/output buffers, for overlap
 	double *buffout;
 	short int numbuff;					//Number of buffers to overlap
+	int windowsize;						//FFT analysis window size used to build this spectrogram
+	int hopsize;							//Samples advanced between successive analysis frames
+	char window_function;				//0 = rectangular (legacy), 1 = Hann (experimental)
 	double windowlength;				//The length of one slice of the graph in milliseconds
 	unsigned long numslices;			//The number of spectrogram structures in the arrays below
 	unsigned int zeroamp;				//The amplitude representing a 0 amplitude for this spectrogram (32768 for 16 bit audio samples, 128 for 8 bit audio samples)
 	char is_stereo;						//This OGG has two audio channels
 	double destmax;
+	double displaymax;					//Robust high-percentile reference used by the experimental display
+	unsigned char *experimental_cache;		//Pre-rendered HQ log-frequency intensity cache for lag-free playback
+	unsigned long experimental_cache_bands;
+	double experimental_cache_fmin;
+	double experimental_cache_fmax;
 	double log_max;						//Will store the logarithm of the product of the window size and the the spectrogram's zeroamp value
 	long rate;
 
@@ -62,6 +73,7 @@ struct spectrogramcolorscalestruct
 extern struct spectrogramstruct *eof_spectrogram;	//Stores the spectrogram data
 extern struct spectrogramcolorscalestruct *eof_spectrogram_colorscale;  //Stores the current colorscale being used
 extern char eof_display_spectrogram;				//Specifies whether the spectrogram display is enabled
+extern char eof_display_spectrogram_experimental;	//Specifies whether the experimental spectrogram display is enabled
 extern char eof_spectrogram_renderlocation;			//Specifies where and how high the graph will render (0 = fretboard area, 1 = editor window)
 extern char eof_spectrogram_renderleftchannel;		//Specifies whether the left channel's graph should render
 extern char eof_spectrogram_renderrightchannel;		//Specifies whether the right channel's graph should render
@@ -87,6 +99,10 @@ void eof_destroy_spectrogram(struct spectrogramstruct *ptr);
 int eof_render_spectrogram(struct spectrogramstruct *spectrogram);
 	//Renders the left channel spectrogram into the editor window, taking the zoom level into account
 	//Returns nonzero on failure
+int eof_render_spectrogram_experimental(struct spectrogramstruct *spectrogram);
+	//Renders the HQ experimental spectrogram (4096-point Hann STFT, 75% overlap, robust 99.5% ceiling and precomputed adaptive contrast cache)
+int eof_spectrogram_auto_sync_notes(const char *audio_filename, unsigned long track, unsigned char diff, char selected_only, unsigned long max_shift_ms, unsigned long *events_considered, unsigned long *events_moved, double *mean_abs_shift);
+	//High-resolution conservative timing refinement: SuperFlux-style novelty, harmonic/percussive cues, pitch-class evidence, original-timing prior and anchor-constrained sequence alignment.
 void eof_render_spectrogram_line(struct spectrogramstruct *spectrogram,struct spectrogramchanneldata *channel,unsigned amp,unsigned long x,int color);
 	//Debugging function used for testing a colorscale, draws a line of a given color on the spectrogram
 void eof_render_spectrogram_col(struct spectrogramstruct *spectrogram,struct spectrogramchanneldata *channel,struct spectrogramslice *ampdata, unsigned long x, unsigned long curms);
@@ -97,6 +113,8 @@ void eof_generate_colorscale(char scalenum);
 	//Generates color scales
 
 struct spectrogramstruct *eof_create_spectrogram(char *oggfilename);
+struct spectrogramstruct *eof_create_spectrogram_experimental(char *oggfilename);
+	//Creates the experimental 4096-point Hann/75%-overlap spectrogram and its precomputed HQ display cache
 	//Decompresses the specified OGG file into memory and creates spectrogram data
 	//windowlength is the length of one spectrogram graph slice in milliseconds
 	//The correct number of samples are used to represent each column (slice) of the graph
